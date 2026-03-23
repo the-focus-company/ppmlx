@@ -20,6 +20,60 @@ for _p in [
     if _p not in sys.modules:
         _stub(_p)
 
+# Pre-import real pp_llm modules so that test_cli.py / test_server.py cannot
+# replace them with MagicMock (both files guard injection with
+# `if mod not in sys.modules`, so pre-importing here wins).
+# This runs at collection time — before any test file is collected.
+import pp_llm.config        # noqa: E402
+import pp_llm.schema        # noqa: E402
+import pp_llm.db            # noqa: E402
+import pp_llm.models        # noqa: E402
+import pp_llm.memory        # noqa: E402
+import pp_llm.modelfile     # noqa: E402
+import pp_llm.quantize      # noqa: E402
+import pp_llm.engine        # noqa: E402
+import pp_llm.engine_embed  # noqa: E402
+import pp_llm.engine_vlm    # noqa: E402
+
+# Snapshot real module attributes HERE (module level) — before any test file
+# is collected.  test_server.py's module-level code runs at collection time and
+# pollutes pp_llm.engine.get_engine etc. with MagicMocks.  By snapshotting now
+# we capture the clean state and can restore it before every test.
+_CLEAN_MODULE_STATE: dict[str, dict] = {
+    mod_name: {k: v for k, v in vars(mod).items() if not k.startswith("__")}
+    for mod_name, mod in sys.modules.items()
+    if mod_name.startswith("pp_llm.") and isinstance(mod, types.ModuleType)
+}
+
+
+@pytest.fixture(autouse=True)
+def _restore_module_attrs():
+    """Restore pp_llm.* modules to their pre-collection clean state before each test.
+
+    Both test_cli.py and test_server.py monkey-patch real module attributes
+    (some at collection time, some inside test functions).  This fixture
+    restores the clean snapshot captured at conftest load time so every test
+    starts from a known-good baseline.
+    """
+    # Restore BEFORE the test runs
+    for mod_name, saved in _CLEAN_MODULE_STATE.items():
+        mod = sys.modules.get(mod_name)
+        if mod is None or not isinstance(mod, types.ModuleType):
+            continue
+        current = {k for k in vars(mod) if not k.startswith("__")}
+        for key in current - set(saved):
+            try:
+                delattr(mod, key)
+            except Exception:
+                pass
+        for key, val in saved.items():
+            if vars(mod).get(key) is not val:
+                try:
+                    setattr(mod, key, val)
+                except Exception:
+                    pass
+    yield
+
 
 @pytest.fixture()
 def tmp_home(tmp_path, monkeypatch):

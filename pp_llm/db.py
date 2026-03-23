@@ -106,6 +106,7 @@ class Database:
                 try:
                     item = self._queue.get(timeout=0.5)
                     if item is None:  # sentinel
+                        self._queue.task_done()
                         break
                     sql, params = item
                     try:
@@ -120,6 +121,13 @@ class Database:
         except Exception as e:
             print(f"[pp-llm db] Writer thread error: {e}", file=sys.stderr)
         finally:
+            # Drain remaining items so any flush() calls don't block forever
+            while True:
+                try:
+                    self._queue.get_nowait()
+                    self._queue.task_done()
+                except queue.Empty:
+                    break
             if conn:
                 try:
                     conn.close()
@@ -267,6 +275,15 @@ class Database:
     def flush(self) -> None:
         """Wait for the write queue to drain."""
         try:
+            # If the writer thread has already exited, drain the queue ourselves
+            # to prevent queue.join() from blocking indefinitely.
+            if self._thread is not None and not self._thread.is_alive():
+                while True:
+                    try:
+                        self._queue.get_nowait()
+                        self._queue.task_done()
+                    except queue.Empty:
+                        break
             self._queue.join()
         except Exception:
             pass
