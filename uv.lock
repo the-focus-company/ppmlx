@@ -604,7 +604,7 @@ wheels = [
 ]
 
 [[package]]
-name = "pp-llm"
+name = "ppmlx"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
@@ -643,7 +643,7 @@ requires-dist = [
     { name = "questionary", specifier = ">=2.0" },
     { name = "rich", specifier = ">=13.0" },
     { name = "sse-starlette", specifier = ">=2.0" },
-    { name = "typer", extras = ["all"], specifier = ">=0.12" },
+    { name = "typer", specifier = ">=0.12" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
 

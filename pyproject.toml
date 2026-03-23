@@ -22,6 +22,7 @@ dependencies = [
 
 [project.scripts]
 ppmlx = "ppmlx.cli:app"
+pp-llm = "ppmlx.cli:app"
 
 [build-system]
 requires = ["hatchling"]
