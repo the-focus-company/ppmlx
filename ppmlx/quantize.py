@@ -23,10 +23,10 @@ class QuantizationError(Exception):
 def _get_output_path(hf_path: str, bits: int) -> Path:
     """Generate default output path for a quantized model."""
     try:
-        from pp_llm.config import get_pp_llm_dir
-        models_dir = get_pp_llm_dir() / "models"
+        from ppmlx.config import get_ppmlx_dir
+        models_dir = get_ppmlx_dir() / "models"
     except ImportError:
-        models_dir = Path.home() / ".pp-llm" / "models"
+        models_dir = Path.home() / ".ppmlx" / "models"
     safe_name = hf_path.replace("/", "--")
     return models_dir / f"{safe_name}-{bits}bit"
 
@@ -34,7 +34,7 @@ def _get_output_path(hf_path: str, bits: int) -> Path:
 def _resolve_source(hf_path_or_alias: str) -> str:
     """Resolve alias to repo ID if needed."""
     try:
-        from pp_llm.models import resolve_alias
+        from ppmlx.models import resolve_alias
         return resolve_alias(hf_path_or_alias)
     except Exception:
         return hf_path_or_alias
@@ -97,7 +97,7 @@ def _try_python_api(repo_id: str, output_path: Path, config: QuantizeConfig) -> 
         )
         return True
     except Exception as e:
-        print(f"[pp-llm] Python API failed: {e}, trying subprocess...", file=sys.stderr)
+        print(f"[ppmlx] Python API failed: {e}, trying subprocess...", file=sys.stderr)
         return False
 
 
@@ -122,11 +122,11 @@ def _try_subprocess(
 
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
-            print(f"[pp-llm] mlx_lm.convert error: {result.stderr}", file=sys.stderr)
+            print(f"[ppmlx] mlx_lm.convert error: {result.stderr}", file=sys.stderr)
             return False
         return True
     except Exception as e:
-        print(f"[pp-llm] Subprocess fallback failed: {e}", file=sys.stderr)
+        print(f"[ppmlx] Subprocess fallback failed: {e}", file=sys.stderr)
         return False
 
 
@@ -147,13 +147,13 @@ def _upload_to_hub(
             token=token,
         )
     except Exception as e:
-        print(f"[pp-llm] Upload failed: {e}", file=sys.stderr)
+        print(f"[ppmlx] Upload failed: {e}", file=sys.stderr)
 
 
 def _create_alias(repo_id: str, output_path: Path, bits: int) -> None:
     """Auto-create a user alias for the quantized model."""
     try:
-        from pp_llm.models import save_user_alias
+        from ppmlx.models import save_user_alias
         short = repo_id.split("/")[-1].lower()
         alias = f"{short}-{bits}bit"
         save_user_alias(alias, str(output_path))

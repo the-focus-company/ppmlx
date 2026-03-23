@@ -7,14 +7,14 @@ import threading
 from pathlib import Path
 from typing import Any
 
-# Import get_pp_llm_dir lazily to avoid circular imports at module level
+# Import get_ppmlx_dir lazily to avoid circular imports at module level
 # but also provide a fallback for isolated testing
 def _get_db_path() -> Path:
     try:
-        from pp_llm.config import get_pp_llm_dir
-        return get_pp_llm_dir() / "pp-llm.db"
+        from ppmlx.config import get_ppmlx_dir
+        return get_ppmlx_dir() / "ppmlx.db"
     except ImportError:
-        return Path.home() / ".pp-llm" / "pp-llm.db"
+        return Path.home() / ".ppmlx" / "ppmlx.db"
 
 
 _SCHEMA = """
@@ -71,7 +71,7 @@ CREATE INDEX IF NOT EXISTS idx_model_events_timestamp ON model_events(timestamp)
 
 
 class Database:
-    """Thread-safe SQLite database for pp-llm logging."""
+    """Thread-safe SQLite database for ppmlx logging."""
 
     def __init__(self, path: Path | None = None):
         self._path = path or _get_db_path()
@@ -88,12 +88,12 @@ class Database:
             conn.commit()
             conn.close()
         except Exception as e:
-            print(f"[pp-llm db] Warning: failed to init database: {e}", file=sys.stderr)
+            print(f"[ppmlx db] Warning: failed to init database: {e}", file=sys.stderr)
 
         if self._thread is None or not self._thread.is_alive():
             self._stop_event.clear()
             self._thread = threading.Thread(
-                target=self._writer_loop, daemon=True, name="pp-llm-db-writer"
+                target=self._writer_loop, daemon=True, name="ppmlx-db-writer"
             )
             self._thread.start()
 
@@ -113,13 +113,13 @@ class Database:
                         conn.execute(sql, params)
                         conn.commit()
                     except Exception as e:
-                        print(f"[pp-llm db] Write error: {e}", file=sys.stderr)
+                        print(f"[ppmlx db] Write error: {e}", file=sys.stderr)
                     finally:
                         self._queue.task_done()
                 except queue.Empty:
                     continue
         except Exception as e:
-            print(f"[pp-llm db] Writer thread error: {e}", file=sys.stderr)
+            print(f"[ppmlx db] Writer thread error: {e}", file=sys.stderr)
         finally:
             # Drain remaining items so any flush() calls don't block forever
             while True:
@@ -235,7 +235,7 @@ class Database:
                 ).fetchall()
             return [dict(r) for r in rows]
         except Exception as e:
-            print(f"[pp-llm db] Query error: {e}", file=sys.stderr)
+            print(f"[ppmlx db] Query error: {e}", file=sys.stderr)
             return []
 
     def get_stats(self, since_hours: float = 24) -> dict[str, Any]:
@@ -269,7 +269,7 @@ class Database:
                 "by_model": model_rows,
             }
         except Exception as e:
-            print(f"[pp-llm db] Stats error: {e}", file=sys.stderr)
+            print(f"[ppmlx db] Stats error: {e}", file=sys.stderr)
             return {"total_requests": 0, "avg_duration_ms": None, "by_model": []}
 
     def flush(self) -> None:

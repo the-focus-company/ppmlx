@@ -1,7 +1,7 @@
 [project]
-name = "pp-llm"
+name = "ppmlx"
 version = "0.1.0"
-description = "Ollama-style CLI for running LLMs on Apple Silicon via MLX"
+description = "CLI for running LLMs on Apple Silicon via MLX"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11,<3.13"
@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.scripts]
-pp-llm = "pp_llm.cli:app"
+ppmlx = "ppmlx.cli:app"
 
 [build-system]
 requires = ["hatchling"]
@@ -36,4 +36,4 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["pp_llm"]
+packages = ["ppmlx"]

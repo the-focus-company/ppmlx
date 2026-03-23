@@ -1,10 +1,10 @@
-"""Tests for pp_llm/memory.py"""
+"""Tests for ppmlx/memory.py"""
 from __future__ import annotations
 import subprocess
 from pathlib import Path
 import pytest
 
-from pp_llm.memory import (
+from ppmlx.memory import (
     get_system_ram_bytes,
     get_system_ram_gb,
     estimate_model_memory_bytes,
@@ -46,7 +46,7 @@ def test_estimate_nonexistent_path(tmp_path):
 def test_check_memory_warning_small_model(tmp_path, monkeypatch):
     # Mock system RAM to 16 GB
     monkeypatch.setattr(
-        "pp_llm.memory.get_system_ram_bytes",
+        "ppmlx.memory.get_system_ram_bytes",
         lambda: 16 * 1024 ** 3,
     )
     # Create ~1 GB of files (in model_gb terms: 1 GB * 1.2 = 1.2 GB, ratio = 1.2/16 = 0.075)
@@ -54,7 +54,7 @@ def test_check_memory_warning_small_model(tmp_path, monkeypatch):
     # So raw files = 1 GB / 1.2 ≈ 0.833 GB ≈ 894 MB
     # For test speed, mock estimate_model_memory_gb directly
     monkeypatch.setattr(
-        "pp_llm.memory.estimate_model_memory_gb",
+        "ppmlx.memory.estimate_model_memory_gb",
         lambda p: 1.0,
     )
     # 1.0 GB / 16 GB = 0.0625 ratio → no warning
@@ -65,12 +65,12 @@ def test_check_memory_warning_small_model(tmp_path, monkeypatch):
 def test_check_memory_warning_too_large(tmp_path, monkeypatch):
     # Mock system RAM to 8 GB
     monkeypatch.setattr(
-        "pp_llm.memory.get_system_ram_bytes",
+        "ppmlx.memory.get_system_ram_bytes",
         lambda: 8 * 1024 ** 3,
     )
     # Mock model size to 10 GB — exceeds RAM
     monkeypatch.setattr(
-        "pp_llm.memory.estimate_model_memory_gb",
+        "ppmlx.memory.estimate_model_memory_gb",
         lambda p: 10.0,
     )
     result = check_memory_warning(tmp_path)

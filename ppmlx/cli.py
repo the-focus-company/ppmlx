@@ -10,8 +10,8 @@ from rich.panel import Panel
 from rich import print as rprint
 
 app = typer.Typer(
-    name="pp-llm",
-    help="Run LLMs locally on Apple Silicon via MLX — Ollama-style CLI",
+    name="ppmlx",
+    help="Run LLMs locally on Apple Silicon via MLX",
     no_args_is_help=True,
 )
 console = Console()
@@ -19,8 +19,8 @@ console = Console()
 
 def _version_callback(value: bool):
     if value:
-        from pp_llm import __version__
-        console.print(f"pp-llm {__version__}")
+        from ppmlx import __version__
+        console.print(f"ppmlx {__version__}")
         raise typer.Exit()
 
 
@@ -32,7 +32,7 @@ def main(
         help="Show version and exit.",
     )
 ):
-    """pp-llm: Run LLMs on Apple Silicon via MLX."""
+    """ppmlx: Run LLMs on Apple Silicon via MLX."""
 
 
 @app.command()
@@ -46,8 +46,8 @@ def serve(
 ):
     """Start the OpenAI-compatible API server."""
     import uvicorn
-    from pp_llm.config import load_config
-    from pp_llm import __version__
+    from ppmlx.config import load_config
+    from ppmlx import __version__
 
     overrides = {}
     if host: overrides["host"] = host
@@ -61,7 +61,7 @@ def serve(
     # Interactive model selection
     if interactive and model is None:
         import questionary
-        from pp_llm.models import list_local_models
+        from ppmlx.models import list_local_models
         local = list_local_models()
         if local:
             choices = [questionary.Choice("(none — lazy load on first request)", value=None)]
@@ -70,10 +70,10 @@ def serve(
                 choices.append(questionary.Choice(label, value=m["alias"]))
             model = questionary.select("Select model to pre-load:", choices=choices).ask()
         else:
-            console.print("[dim]No local models found. Download one first: pp-llm pull[/dim]")
+            console.print("[dim]No local models found. Download one first: ppmlx pull[/dim]")
 
     console.print(Panel(
-        f"[bold green]pp-llm server v{__version__}[/bold green]\n"
+        f"[bold green]ppmlx server v{__version__}[/bold green]\n"
         f"   Listening on [link]http://{effective_host}:{effective_port}[/link]\n"
         f"   Endpoints:\n"
         f"     POST /v1/chat/completions\n"
@@ -82,8 +82,8 @@ def serve(
         f"     GET  /v1/models\n"
         f"     GET  /health\n"
         f"     GET  /metrics\n"
-        f"   SQLite log: ~/.pp-llm/pp-llm.db",
-        title="pp-llm",
+        f"   SQLite log: ~/.ppmlx/ppmlx.db",
+        title="ppmlx",
         border_style="green",
     ))
 
@@ -101,7 +101,7 @@ def serve(
     ))
 
     uvicorn.run(
-        "pp_llm.server:app",
+        "ppmlx.server:app",
         host=effective_host,
         port=effective_port,
         log_level="info",
@@ -118,9 +118,9 @@ def run(
     max_tokens: Optional[int] = typer.Option(None, "--max-tokens"),
 ):
     """Start an interactive chat REPL with a model."""
-    from pp_llm.models import get_model_path, download_model, resolve_alias, ModelNotFoundError
-    from pp_llm.engine import get_engine
-    from pp_llm.memory import check_memory_warning
+    from ppmlx.models import get_model_path, download_model, resolve_alias, ModelNotFoundError
+    from ppmlx.engine import get_engine
+    from ppmlx.memory import check_memory_warning
 
     try:
         repo_id = resolve_alias(model)
@@ -203,8 +203,8 @@ def run(
 
 def _do_pull(model: str, token: Optional[str]) -> bool:
     """Download a single model and print result. Returns True on success."""
-    from pp_llm.models import download_model, resolve_alias, ModelNotFoundError
-    from pp_llm.memory import check_memory_warning
+    from ppmlx.models import download_model, resolve_alias, ModelNotFoundError
+    from ppmlx.memory import check_memory_warning
 
     try:
         repo_id = resolve_alias(model)
@@ -233,7 +233,7 @@ def pull(
     """Download a model from HuggingFace Hub (interactive multiselect when no model given)."""
     if model is None:
         import questionary
-        from pp_llm.models import DEFAULT_ALIASES, list_local_models
+        from ppmlx.models import DEFAULT_ALIASES, list_local_models
 
         local_repos = {m["repo_id"] for m in list_local_models()}
         choices = []
@@ -264,11 +264,11 @@ def pull(
 @app.command(name="list")
 def list_models():
     """List locally downloaded models."""
-    from pp_llm.models import list_local_models
+    from ppmlx.models import list_local_models
 
     models = list_local_models()
     if not models:
-        console.print("[dim]No models downloaded yet. Run: pp-llm pull <model>[/dim]")
+        console.print("[dim]No models downloaded yet. Run: ppmlx pull <model>[/dim]")
         return
 
     table = Table(title="Local Models", show_header=True)
@@ -293,7 +293,7 @@ def rm(
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
 ):
     """Remove a locally downloaded model."""
-    from pp_llm.models import remove_model, get_model_path, resolve_alias
+    from ppmlx.models import remove_model, get_model_path, resolve_alias
 
     try:
         repo_id = resolve_alias(model)
@@ -324,7 +324,7 @@ def add_alias(
     repo: str = typer.Argument(..., help="HuggingFace repo ID (e.g. org/model)"),
 ):
     """Add a custom model alias."""
-    from pp_llm.models import save_user_alias
+    from ppmlx.models import save_user_alias
     save_user_alias(name, repo)
     console.print(f"[green]Alias created: [bold]{name}[/bold] -> {repo}[/green]")
 
@@ -332,7 +332,7 @@ def add_alias(
 @app.command()
 def aliases():
     """Show all model aliases (built-in + custom)."""
-    from pp_llm.models import DEFAULT_ALIASES, load_user_aliases
+    from ppmlx.models import DEFAULT_ALIASES, load_user_aliases
 
     user_aliases = load_user_aliases()
 
@@ -357,7 +357,7 @@ def aliases():
 def ps():
     """Show currently loaded models and memory usage."""
     import httpx
-    from pp_llm.config import load_config
+    from ppmlx.config import load_config
 
     cfg = load_config()
     url = f"http://{cfg.server.host}:{cfg.server.port}/health"
@@ -369,7 +369,7 @@ def ps():
         uptime = data.get("uptime_seconds", 0)
 
         if not loaded:
-            console.print("[dim]No models currently loaded. Start server: pp-llm serve[/dim]")
+            console.print("[dim]No models currently loaded. Start server: ppmlx serve[/dim]")
             return
 
         table = Table(title="Loaded Models")
@@ -379,7 +379,7 @@ def ps():
         console.print(table)
         console.print(f"[dim]Server uptime: {uptime}s[/dim]")
     except Exception:
-        console.print("[yellow]Server not running. Start it with: pp-llm serve[/yellow]")
+        console.print("[yellow]Server not running. Start it with: ppmlx serve[/yellow]")
 
 
 @app.command()
@@ -392,7 +392,7 @@ def quantize(
     token: Optional[str] = typer.Option(None, "--token", help="HuggingFace token"),
 ):
     """Convert and quantize a HuggingFace model to MLX format."""
-    from pp_llm.quantize import quantize as do_quantize, QuantizeConfig
+    from ppmlx.quantize import quantize as do_quantize, QuantizeConfig
 
     cfg = QuantizeConfig(
         bits=bits,
@@ -416,7 +416,7 @@ def create(
     file: str = typer.Option("Modelfile", "-f", help="Path to Modelfile"),
 ):
     """Create a custom model from a Modelfile."""
-    from pp_llm.modelfile import parse_modelfile, save_modelfile, ModelfileParseError
+    from ppmlx.modelfile import parse_modelfile, save_modelfile, ModelfileParseError
 
     mf_path = Path(file)
     if not mf_path.exists():
@@ -445,14 +445,14 @@ def logs(
     slow: Optional[float] = typer.Option(None, "--slow", help="Show requests slower than N ms"),
 ):
     """Query the request log database."""
-    from pp_llm.db import get_db
+    from ppmlx.db import get_db
 
     db = get_db()
     db.init()
 
     if stats:
         s = db.get_stats()
-        table = Table(title="pp-llm Statistics (last 24h)")
+        table = Table(title="ppmlx Statistics (last 24h)")
         table.add_column("Model", style="cyan")
         table.add_column("Requests", justify="right")
         table.add_column("Avg tok/s", justify="right")
@@ -522,8 +522,8 @@ def info(
     model: str = typer.Argument(..., help="Model alias or repo ID"),
 ):
     """Show detailed model information."""
-    from pp_llm.models import resolve_alias, get_model_path, ModelNotFoundError
-    from pp_llm.memory import estimate_model_memory_gb, get_system_ram_gb
+    from ppmlx.models import resolve_alias, get_model_path, ModelNotFoundError
+    from ppmlx.memory import estimate_model_memory_gb, get_system_ram_gb
 
     try:
         repo_id = resolve_alias(model)
@@ -556,8 +556,8 @@ def estimate(
     model: str = typer.Argument(..., help="Model alias or repo ID"),
 ):
     """Estimate RAM requirements before downloading."""
-    from pp_llm.models import resolve_alias, get_model_path, ModelNotFoundError
-    from pp_llm.memory import estimate_model_memory_gb, get_system_ram_gb, check_memory_warning
+    from ppmlx.models import resolve_alias, get_model_path, ModelNotFoundError
+    from ppmlx.memory import estimate_model_memory_gb, get_system_ram_gb, check_memory_warning
 
     try:
         repo_id = resolve_alias(model)
@@ -581,7 +581,7 @@ def estimate(
     else:
         console.print(f"[yellow]Model not downloaded. Cannot estimate size accurately.[/yellow]")
         console.print(f"[cyan]System RAM:[/cyan] {ram_gb:.0f} GB")
-        console.print(f"[dim]Pull the model first: pp-llm pull {model}[/dim]")
+        console.print(f"[dim]Pull the model first: ppmlx pull {model}[/dim]")
 
 
 if __name__ == "__main__":

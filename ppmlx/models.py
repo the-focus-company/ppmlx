@@ -60,26 +60,26 @@ class ModelNotFoundError(Exception):
     pass
 
 
-def _get_pp_llm_dir() -> Path:
+def _get_ppmlx_dir() -> Path:
     try:
-        from pp_llm.config import get_pp_llm_dir
-        return get_pp_llm_dir()
+        from ppmlx.config import get_ppmlx_dir
+        return get_ppmlx_dir()
     except ImportError:
-        return Path.home() / ".pp-llm"
+        return Path.home() / ".ppmlx"
 
 
 def _get_models_dir() -> Path:
-    d = _get_pp_llm_dir() / "models"
+    d = _get_ppmlx_dir() / "models"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
 def _get_aliases_file() -> Path:
-    return _get_pp_llm_dir() / "aliases.json"
+    return _get_ppmlx_dir() / "aliases.json"
 
 
 def load_user_aliases() -> dict[str, str]:
-    """Load user-defined aliases from ~/.pp-llm/aliases.json."""
+    """Load user-defined aliases from ~/.ppmlx/aliases.json."""
     p = _get_aliases_file()
     if p.exists():
         try:

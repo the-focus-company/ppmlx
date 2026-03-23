@@ -1,9 +1,9 @@
 class PpLlm < Formula
   include Language::Python::Virtualenv
 
-  desc "Ollama-style CLI for running LLMs on Apple Silicon via MLX"
-  homepage "https://github.com/<org>/pp-llm"
-  url "https://files.pythonhosted.org/packages/source/p/pp-llm/pp_llm-0.1.0.tar.gz"
+  desc "CLI for running LLMs on Apple Silicon via MLX"
+  homepage "https://github.com/<org>/ppmlx"
+  url "https://files.pythonhosted.org/packages/source/p/ppmlx/ppmlx-0.1.0.tar.gz"
   sha256 "PLACEHOLDER_SHA256"
   license "MIT"
 
@@ -60,26 +60,26 @@ class PpLlm < Formula
 
   def caveats
     <<~EOS
-      pp-llm requires Apple Silicon (M1/M2/M3/M4) and macOS 13+.
+      ppmlx requires Apple Silicon (M1/M2/M3/M4) and macOS 13+.
 
       MLX dependencies (mlx-lm, mlx-vlm, mlx-embeddings) must be installed
       separately as they require a running macOS ARM64 environment:
 
         pip install mlx-lm mlx-vlm mlx-embeddings
 
-      Or install pp-llm via uv for full dependency resolution:
+      Or install ppmlx via uv for full dependency resolution:
 
-        uv tool install pp-llm
+        uv tool install ppmlx
 
       Quick start:
-        pp-llm pull llama3
-        pp-llm run llama3
-        pp-llm serve          # OpenAI-compatible API on :6767
+        ppmlx pull llama3
+        ppmlx run llama3
+        ppmlx serve          # OpenAI-compatible API on :6767
     EOS
   end
 
   test do
-    assert_match "pp-llm", shell_output("#{bin}/pp-llm --version")
-    assert_match "pp-llm", shell_output("#{bin}/pp-llm --help")
+    assert_match "ppmlx", shell_output("#{bin}/ppmlx --version")
+    assert_match "ppmlx", shell_output("#{bin}/ppmlx --help")
   end
 end

@@ -16,7 +16,7 @@ _start_time = time.time()
 async def lifespan(app: FastAPI):
     """Application lifespan: startup and shutdown."""
     try:
-        from pp_llm.db import get_db
+        from ppmlx.db import get_db
         db = get_db()
         db.init()
         app.state.db = db
@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
         app.state.db = None
 
     try:
-        from pp_llm.config import load_config
+        from ppmlx.config import load_config
         cfg = load_config()
         interval = cfg.logging.snapshot_interval_seconds
     except ImportError:
@@ -49,7 +49,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="pp-llm",
+    title="ppmlx",
     version="0.1.0",
     description="Ollama-style OpenAI-compatible LLM API for Apple Silicon",
     lifespan=lifespan,
@@ -69,9 +69,9 @@ async def _snapshot_loop(interval_seconds: int) -> None:
     while True:
         await asyncio.sleep(interval_seconds)
         try:
-            from pp_llm.memory import get_system_ram_gb
-            from pp_llm.db import get_db
-            from pp_llm.engine import get_engine
+            from ppmlx.memory import get_system_ram_gb
+            from ppmlx.db import get_db
+            from ppmlx.engine import get_engine
             ram_total = get_system_ram_gb()
             loaded = get_engine().list_loaded()
             uptime = int(time.time() - _start_time)
@@ -88,7 +88,7 @@ async def _snapshot_loop(interval_seconds: int) -> None:
 def _route_engine(repo_id: str, has_images: bool) -> str:
     """Determine which engine to use: 'text', 'vision', or 'embed'."""
     try:
-        from pp_llm.models import is_vision_model, is_embed_model
+        from ppmlx.models import is_vision_model, is_embed_model
         if is_embed_model(repo_id):
             return "embed"
         if has_images or is_vision_model(repo_id):
@@ -112,7 +112,7 @@ def _has_images(messages: list[dict]) -> bool:
 def _log_request(_, **kwargs) -> None:
     """Log a request to the DB (best-effort)."""
     try:
-        from pp_llm.db import get_db
+        from ppmlx.db import get_db
         get_db().log_request(**kwargs)
     except Exception:
         pass
@@ -124,13 +124,13 @@ def _log_request(_, **kwargs) -> None:
 async def health(request: Request):
     """Health check endpoint."""
     try:
-        from pp_llm.engine import get_engine
+        from ppmlx.engine import get_engine
         loaded = get_engine().list_loaded()
     except Exception:
         loaded = []
 
     try:
-        from pp_llm.memory import get_system_ram_gb
+        from ppmlx.memory import get_system_ram_gb
         ram_gb = get_system_ram_gb()
     except Exception:
         ram_gb = 0.0
@@ -150,13 +150,13 @@ async def health(request: Request):
 async def metrics():
     """Metrics endpoint — returns JSON stats from the DB."""
     try:
-        from pp_llm.db import get_db
+        from ppmlx.db import get_db
         stats = get_db().get_stats()
     except Exception:
         stats = {"total_requests": 0, "avg_duration_ms": None, "by_model": []}
 
     try:
-        from pp_llm.engine import get_engine
+        from ppmlx.engine import get_engine
         loaded = get_engine().list_loaded()
     except Exception:
         loaded = []
@@ -168,7 +168,7 @@ async def metrics():
 async def list_models():
     """List available models (local + aliases)."""
     try:
-        from pp_llm.models import list_local_models, all_aliases
+        from ppmlx.models import list_local_models, all_aliases
         local = list_local_models()
         aliases = all_aliases()
 
@@ -180,12 +180,12 @@ async def list_models():
             mid = m.get("alias") or m.get("repo_id", "unknown")
             if mid not in seen:
                 seen.add(mid)
-                data.append({"id": mid, "object": "model", "created": now, "owned_by": "pp-llm"})
+                data.append({"id": mid, "object": "model", "created": now, "owned_by": "ppmlx"})
 
         for alias in aliases:
             if alias not in seen:
                 seen.add(alias)
-                data.append({"id": alias, "object": "model", "created": now, "owned_by": "pp-llm"})
+                data.append({"id": alias, "object": "model", "created": now, "owned_by": "ppmlx"})
 
         return {"object": "list", "data": data}
     except ImportError:
@@ -207,7 +207,7 @@ async def chat_completions(request: Request):
     repetition_penalty = body.get("repetition_penalty")
 
     try:
-        from pp_llm.models import resolve_alias
+        from ppmlx.models import resolve_alias
         repo_id = resolve_alias(model_name)
     except Exception:
         repo_id = model_name
@@ -245,7 +245,7 @@ def _stream_chat(
         first_token_ts = None
         try:
             if engine_type == "text":
-                from pp_llm.engine import get_engine
+                from ppmlx.engine import get_engine
                 engine = get_engine()
                 for chunk in engine.stream_generate(
                     repo_id, messages,
@@ -266,7 +266,7 @@ def _stream_chat(
                     }
                     yield f"data: {json.dumps(data)}\n\n"
             elif engine_type == "vision":
-                from pp_llm.engine_vlm import get_vision_engine
+                from ppmlx.engine_vlm import get_vision_engine
                 engine = get_vision_engine()
                 text, _, _ = engine.generate(repo_id, messages, max_tokens=1024 if max_tokens is None else max_tokens)
                 if first_token_ts is None:
@@ -318,7 +318,7 @@ async def _nonstream_chat(
     """Return non-streaming JSON response."""
     try:
         if engine_type == "text":
-            from pp_llm.engine import get_engine
+            from ppmlx.engine import get_engine
             engine = get_engine()
             text, reasoning, prompt_tokens, completion_tokens = engine.generate(
                 repo_id, messages,
@@ -329,7 +329,7 @@ async def _nonstream_chat(
                 repetition_penalty=repetition_penalty,
             )
         elif engine_type == "vision":
-            from pp_llm.engine_vlm import get_vision_engine
+            from ppmlx.engine_vlm import get_vision_engine
             engine = get_vision_engine()
             text, prompt_tokens, completion_tokens = engine.generate(repo_id, messages)
             reasoning = None
@@ -399,7 +399,7 @@ async def completions(request: Request):
     messages = [{"role": "user", "content": prompt}]
 
     try:
-        from pp_llm.models import resolve_alias
+        from ppmlx.models import resolve_alias
         repo_id = resolve_alias(model_name)
     except Exception:
         repo_id = model_name
@@ -409,7 +409,7 @@ async def completions(request: Request):
     start_ts = time.time()
 
     try:
-        from pp_llm.engine import get_engine
+        from ppmlx.engine import get_engine
         engine = get_engine()
         text, reasoning, prompt_tokens, completion_tokens = engine.generate(
             repo_id, messages,
@@ -446,13 +446,13 @@ async def embeddings(request: Request):
         texts = list(input_text)
 
     try:
-        from pp_llm.models import resolve_alias
+        from ppmlx.models import resolve_alias
         repo_id = resolve_alias(model_name)
     except Exception:
         repo_id = model_name
 
     try:
-        from pp_llm.engine_embed import get_embed_engine
+        from ppmlx.engine_embed import get_embed_engine
         engine = get_embed_engine()
         vectors = engine.encode(repo_id, texts)
     except Exception as e:

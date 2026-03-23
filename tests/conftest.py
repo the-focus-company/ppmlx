@@ -20,35 +20,35 @@ for _p in [
     if _p not in sys.modules:
         _stub(_p)
 
-# Pre-import real pp_llm modules so that test_cli.py / test_server.py cannot
+# Pre-import real ppmlx modules so that test_cli.py / test_server.py cannot
 # replace them with MagicMock (both files guard injection with
 # `if mod not in sys.modules`, so pre-importing here wins).
 # This runs at collection time — before any test file is collected.
-import pp_llm.config        # noqa: E402
-import pp_llm.schema        # noqa: E402
-import pp_llm.db            # noqa: E402
-import pp_llm.models        # noqa: E402
-import pp_llm.memory        # noqa: E402
-import pp_llm.modelfile     # noqa: E402
-import pp_llm.quantize      # noqa: E402
-import pp_llm.engine        # noqa: E402
-import pp_llm.engine_embed  # noqa: E402
-import pp_llm.engine_vlm    # noqa: E402
+import ppmlx.config        # noqa: E402
+import ppmlx.schema        # noqa: E402
+import ppmlx.db            # noqa: E402
+import ppmlx.models        # noqa: E402
+import ppmlx.memory        # noqa: E402
+import ppmlx.modelfile     # noqa: E402
+import ppmlx.quantize      # noqa: E402
+import ppmlx.engine        # noqa: E402
+import ppmlx.engine_embed  # noqa: E402
+import ppmlx.engine_vlm    # noqa: E402
 
 # Snapshot real module attributes HERE (module level) — before any test file
 # is collected.  test_server.py's module-level code runs at collection time and
-# pollutes pp_llm.engine.get_engine etc. with MagicMocks.  By snapshotting now
+# pollutes ppmlx.engine.get_engine etc. with MagicMocks.  By snapshotting now
 # we capture the clean state and can restore it before every test.
 _CLEAN_MODULE_STATE: dict[str, dict] = {
     mod_name: {k: v for k, v in vars(mod).items() if not k.startswith("__")}
     for mod_name, mod in sys.modules.items()
-    if mod_name.startswith("pp_llm.") and isinstance(mod, types.ModuleType)
+    if mod_name.startswith("ppmlx.") and isinstance(mod, types.ModuleType)
 }
 
 
 @pytest.fixture(autouse=True)
 def _restore_module_attrs():
-    """Restore pp_llm.* modules to their pre-collection clean state before each test.
+    """Restore ppmlx.* modules to their pre-collection clean state before each test.
 
     Both test_cli.py and test_server.py monkey-patch real module attributes
     (some at collection time, some inside test functions).  This fixture
@@ -77,6 +77,6 @@ def _restore_module_attrs():
 
 @pytest.fixture()
 def tmp_home(tmp_path, monkeypatch):
-    """Redirect ~/.pp-llm to a temp directory for isolation."""
+    """Redirect ~/.ppmlx to a temp directory for isolation."""
     monkeypatch.setenv("HOME", str(tmp_path))
     return tmp_path

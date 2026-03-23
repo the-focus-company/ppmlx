@@ -1,4 +1,4 @@
-"""Tests for pp_llm.engine — all mlx_lm calls are mocked."""
+"""Tests for ppmlx.engine — all mlx_lm calls are mocked."""
 from __future__ import annotations
 import sys
 import types
@@ -44,7 +44,7 @@ def test_lru_eviction():
     fake, mock_model, mock_tokenizer = _make_fake_mlx_lm()
     _install_fake(fake)
 
-    from pp_llm.engine import TextEngine, reset_engine
+    from ppmlx.engine import TextEngine, reset_engine
     reset_engine()
     engine = TextEngine(max_loaded=2)
 
@@ -66,7 +66,7 @@ def test_load_already_loaded_moves_to_end():
     fake, mock_model, mock_tokenizer = _make_fake_mlx_lm()
     _install_fake(fake)
 
-    from pp_llm.engine import TextEngine, reset_engine
+    from ppmlx.engine import TextEngine, reset_engine
     reset_engine()
     engine = TextEngine(max_loaded=2)
 
@@ -89,7 +89,7 @@ def test_generate_calls_mlx():
     fake, mock_model, mock_tokenizer = _make_fake_mlx_lm(generate_return="Hello!")
     _install_fake(fake)
 
-    from pp_llm.engine import TextEngine, reset_engine
+    from ppmlx.engine import TextEngine, reset_engine
     reset_engine()
     engine = TextEngine(max_loaded=2)
 
@@ -113,7 +113,7 @@ def test_generate_returns_text():
     fake, _, _ = _make_fake_mlx_lm(generate_return="Hello there!")
     _install_fake(fake)
 
-    from pp_llm.engine import TextEngine, reset_engine
+    from ppmlx.engine import TextEngine, reset_engine
     reset_engine()
     engine = TextEngine(max_loaded=2)
 
@@ -134,7 +134,7 @@ def test_generate_strips_thinking():
     fake, _, _ = _make_fake_mlx_lm(generate_return="<think>reasoning here</think>answer text")
     _install_fake(fake)
 
-    from pp_llm.engine import TextEngine, reset_engine
+    from ppmlx.engine import TextEngine, reset_engine
     reset_engine()
     engine = TextEngine(max_loaded=2)
 
@@ -153,7 +153,7 @@ def test_stream_generate_yields_chunks():
     fake, _, _ = _make_fake_mlx_lm(stream_chunks=chunks)
     _install_fake(fake)
 
-    from pp_llm.engine import TextEngine, reset_engine
+    from ppmlx.engine import TextEngine, reset_engine
     reset_engine()
     engine = TextEngine(max_loaded=2)
 
@@ -167,7 +167,7 @@ def test_stream_generate_yields_chunks():
 # 7. _strip_thinking helper
 # ---------------------------------------------------------------------------
 def test_strip_thinking_helper():
-    from pp_llm.engine import _strip_thinking
+    from ppmlx.engine import _strip_thinking
 
     # Basic case
     text, reasoning = _strip_thinking("<think>inner reasoning</think>final answer")
@@ -190,7 +190,7 @@ def test_strip_thinking_helper():
 # 8. No thinking tag — text unchanged
 # ---------------------------------------------------------------------------
 def test_no_thinking_unchanged():
-    from pp_llm.engine import _strip_thinking
+    from ppmlx.engine import _strip_thinking
 
     original = "This is a plain response."
     text, reasoning = _strip_thinking(original)
@@ -205,7 +205,7 @@ def test_unload():
     fake, _, _ = _make_fake_mlx_lm()
     _install_fake(fake)
 
-    from pp_llm.engine import TextEngine, reset_engine
+    from ppmlx.engine import TextEngine, reset_engine
     reset_engine()
     engine = TextEngine(max_loaded=2)
 
@@ -227,7 +227,7 @@ def test_unload_all():
     fake, _, _ = _make_fake_mlx_lm()
     _install_fake(fake)
 
-    from pp_llm.engine import TextEngine, reset_engine
+    from ppmlx.engine import TextEngine, reset_engine
     reset_engine()
     engine = TextEngine(max_loaded=3)
 
@@ -243,7 +243,7 @@ def test_unload_all():
 # 11. list_loaded empty on fresh engine
 # ---------------------------------------------------------------------------
 def test_list_loaded_empty():
-    from pp_llm.engine import TextEngine, reset_engine
+    from ppmlx.engine import TextEngine, reset_engine
     reset_engine()
     engine = TextEngine(max_loaded=2)
     assert engine.list_loaded() == []
@@ -253,7 +253,7 @@ def test_list_loaded_empty():
 # 12. Singleton get_engine / reset_engine
 # ---------------------------------------------------------------------------
 def test_singleton():
-    from pp_llm.engine import get_engine, reset_engine
+    from ppmlx.engine import get_engine, reset_engine
 
     reset_engine()
     e1 = get_engine()
@@ -269,7 +269,7 @@ def test_singleton():
 # 13. _apply_chat_template fallback (no apply_chat_template method)
 # ---------------------------------------------------------------------------
 def test_apply_chat_template_fallback():
-    from pp_llm.engine import TextEngine, LoadedModel, reset_engine
+    from ppmlx.engine import TextEngine, LoadedModel, reset_engine
     reset_engine()
     engine = TextEngine(max_loaded=2)
 
@@ -296,7 +296,7 @@ def test_chat_template_applied():
     mock_tokenizer.apply_chat_template.return_value = "TEMPLATED PROMPT"
     _install_fake(fake)
 
-    from pp_llm.engine import TextEngine, reset_engine
+    from ppmlx.engine import TextEngine, reset_engine
     reset_engine()
     engine = TextEngine(max_loaded=2)
 

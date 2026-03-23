@@ -18,14 +18,14 @@ def _make_mlx_lm_mock(convert_mock=None):
 
 def test_get_output_path(tmp_home, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_home))
-    monkeypatch.setitem(sys.modules, "pp_llm.config", None)
+    monkeypatch.setitem(sys.modules, "ppmlx.config", None)
 
     import importlib
-    import pp_llm.quantize as qmod
+    import ppmlx.quantize as qmod
     importlib.reload(qmod)
 
     result = qmod._get_output_path("org/repo", 4)
-    expected = tmp_home / ".pp-llm" / "models" / "org--repo-4bit"
+    expected = tmp_home / ".ppmlx" / "models" / "org--repo-4bit"
     assert result == expected
 
 
@@ -36,7 +36,7 @@ def test_quantize_calls_python_api(tmp_home, monkeypatch):
     monkeypatch.setitem(sys.modules, "mlx_lm", fake_mlx_lm)
 
     import importlib
-    import pp_llm.quantize as qmod
+    import ppmlx.quantize as qmod
     importlib.reload(qmod)
 
     out_path = tmp_home / "quantized"
@@ -63,7 +63,7 @@ def test_quantize_fallback_to_subprocess(tmp_home, monkeypatch):
     monkeypatch.setattr(subprocess, "run", run_mock)
 
     import importlib
-    import pp_llm.quantize as qmod
+    import ppmlx.quantize as qmod
     importlib.reload(qmod)
 
     out_path = tmp_home / "quantized"
@@ -87,13 +87,13 @@ def test_quantize_creates_alias(tmp_home, monkeypatch):
     def fake_save_user_alias(alias: str, path: str) -> None:
         saved_aliases[alias] = path
 
-    fake_models = types.ModuleType("pp_llm.models")
+    fake_models = types.ModuleType("ppmlx.models")
     fake_models.save_user_alias = fake_save_user_alias
     fake_models.resolve_alias = lambda x: x
-    monkeypatch.setitem(sys.modules, "pp_llm.models", fake_models)
+    monkeypatch.setitem(sys.modules, "ppmlx.models", fake_models)
 
     import importlib
-    import pp_llm.quantize as qmod
+    import ppmlx.quantize as qmod
     importlib.reload(qmod)
 
     out_path = tmp_home / "quantized"
@@ -114,7 +114,7 @@ def test_quantize_with_upload(tmp_home, monkeypatch):
     monkeypatch.setitem(sys.modules, "huggingface_hub", fake_hf_hub)
 
     import importlib
-    import pp_llm.quantize as qmod
+    import ppmlx.quantize as qmod
     importlib.reload(qmod)
 
     out_path = tmp_home / "quantized"
@@ -132,7 +132,7 @@ def test_quantize_with_upload(tmp_home, monkeypatch):
 
 
 def test_quantize_config_defaults():
-    from pp_llm.quantize import QuantizeConfig
+    from ppmlx.quantize import QuantizeConfig
     c = QuantizeConfig()
     assert c.bits == 4
     assert c.group_size == 64
@@ -153,7 +153,7 @@ def test_quantize_invalid_raises(tmp_home, monkeypatch):
     monkeypatch.setattr(subprocess, "run", run_mock)
 
     import importlib
-    import pp_llm.quantize as qmod
+    import ppmlx.quantize as qmod
     importlib.reload(qmod)
 
     out_path = tmp_home / "quantized"
@@ -165,13 +165,13 @@ def test_quantize_invalid_raises(tmp_home, monkeypatch):
 def test_resolve_source_with_alias(tmp_home, monkeypatch):
     resolve_mock = MagicMock(return_value="org/real-model")
 
-    fake_models = types.ModuleType("pp_llm.models")
+    fake_models = types.ModuleType("ppmlx.models")
     fake_models.resolve_alias = resolve_mock
     fake_models.save_user_alias = MagicMock()
-    monkeypatch.setitem(sys.modules, "pp_llm.models", fake_models)
+    monkeypatch.setitem(sys.modules, "ppmlx.models", fake_models)
 
     import importlib
-    import pp_llm.quantize as qmod
+    import ppmlx.quantize as qmod
     importlib.reload(qmod)
 
     result = qmod._resolve_source("my-alias")
@@ -186,7 +186,7 @@ def test_quantize_returns_path(tmp_home, monkeypatch):
     monkeypatch.setitem(sys.modules, "mlx_lm", fake_mlx_lm)
 
     import importlib
-    import pp_llm.quantize as qmod
+    import ppmlx.quantize as qmod
     importlib.reload(qmod)
 
     out_path = tmp_home / "quantized"

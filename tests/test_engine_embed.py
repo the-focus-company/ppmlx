@@ -1,9 +1,9 @@
-"""Tests for pp_llm/engine_embed.py"""
+"""Tests for ppmlx/engine_embed.py"""
 from __future__ import annotations
 import math
 import sys
 
-from pp_llm.engine_embed import EmbedEngine, _l2_normalize
+from ppmlx.engine_embed import EmbedEngine, _l2_normalize
 
 
 def test_l2_normalize():

@@ -8,7 +8,7 @@ from typing import Any
 def _resolve_model_path(repo_id: str) -> str:
     """Resolve alias to local path if available."""
     try:
-        from pp_llm.models import get_model_path
+        from ppmlx.models import get_model_path
         local = get_model_path(repo_id)
         if local:
             return str(local)

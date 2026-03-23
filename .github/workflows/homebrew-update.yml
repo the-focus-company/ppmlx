@@ -12,5 +12,5 @@ jobs:
     steps:
       - name: Trigger Homebrew tap update
         run: |
-          echo "TODO: Update homebrew-pp-llm tap formula with new version"
+          echo "TODO: Update homebrew-ppmlx tap formula with new version"
           echo "Steps: download sdist, run brew update-python-resources, update formula sha256"

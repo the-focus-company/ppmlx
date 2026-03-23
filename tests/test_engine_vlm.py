@@ -1,10 +1,10 @@
-"""Tests for pp_llm/engine_vlm.py"""
+"""Tests for ppmlx/engine_vlm.py"""
 from __future__ import annotations
 import base64
 import sys
 import pytest
 
-from pp_llm.engine_vlm import VisionEngine, get_vision_engine
+from ppmlx.engine_vlm import VisionEngine, get_vision_engine
 
 
 def test_extract_images_empty():
@@ -59,7 +59,7 @@ def test_extract_images_base64():
 
 def test_generate_calls_vlm(monkeypatch):
     """Mock mlx_vlm.load and mlx_vlm.generate, verify they are called."""
-    import pp_llm.engine_vlm as engine_vlm_module
+    import ppmlx.engine_vlm as engine_vlm_module
 
     mock_model = object()
     mock_processor = object()

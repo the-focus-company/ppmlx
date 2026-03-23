@@ -1,6 +1,6 @@
-# pp-llm
+# ppmlx
 
-**Ollama-style CLI for running LLMs on Apple Silicon via MLX** — OpenAI-compatible API on port 6767.
+**CLI for running LLMs on Apple Silicon via MLX** — OpenAI-compatible API on port 6767.
 
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
 ![Platform](https://img.shields.io/badge/platform-Apple%20Silicon-lightgrey)
@@ -13,26 +13,26 @@
 ### Homebrew (recommended)
 
 ```bash
-brew tap <org>/pp-llm
-brew install pp-llm
+brew tap <org>/ppmlx
+brew install ppmlx
 ```
 
 ### curl | sh (one-liner)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<org>/pp-llm/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/<org>/ppmlx/main/scripts/install.sh | sh
 ```
 
 ### uv tool install
 
 ```bash
-uv tool install pp-llm
+uv tool install ppmlx
 ```
 
 ### pipx
 
 ```bash
-pipx install pp-llm
+pipx install ppmlx
 ```
 
 ---
@@ -41,13 +41,13 @@ pipx install pp-llm
 
 ```bash
 # 1. Download a model
-pp-llm pull llama3
+ppmlx pull llama3
 
 # 2. Interactive chat REPL
-pp-llm run llama3
+ppmlx run llama3
 
 # 3. Start OpenAI-compatible API server on :6767
-pp-llm serve
+ppmlx serve
 ```
 
 ---
@@ -166,19 +166,19 @@ curl http://localhost:6767/v1/embeddings \
 
 | Command              | Description                                          |
 |----------------------|------------------------------------------------------|
-| `pp-llm pull <model>`| Download a model from HuggingFace Hub                |
-| `pp-llm run <model>` | Start interactive chat REPL                          |
-| `pp-llm serve`       | Start OpenAI-compatible API server on :6767          |
-| `pp-llm list`        | List locally downloaded models                       |
-| `pp-llm rm <model>`  | Remove a downloaded model                            |
-| `pp-llm alias <n> <repo>` | Add a custom model alias                       |
-| `pp-llm aliases`     | Show all model aliases (built-in + custom)           |
-| `pp-llm ps`          | Show currently loaded models and memory usage        |
-| `pp-llm quantize`    | Convert and quantize a model to MLX format           |
-| `pp-llm create`      | Create a custom model from a Modelfile               |
-| `pp-llm logs`        | Query the request log database                       |
-| `pp-llm info <model>`| Show detailed model information                      |
-| `pp-llm estimate <m>`| Estimate RAM requirements before downloading         |
+| `ppmlx pull <model>`| Download a model from HuggingFace Hub                |
+| `ppmlx run <model>` | Start interactive chat REPL                          |
+| `ppmlx serve`       | Start OpenAI-compatible API server on :6767          |
+| `ppmlx list`        | List locally downloaded models                       |
+| `ppmlx rm <model>`  | Remove a downloaded model                            |
+| `ppmlx alias <n> <repo>` | Add a custom model alias                       |
+| `ppmlx aliases`     | Show all model aliases (built-in + custom)           |
+| `ppmlx ps`          | Show currently loaded models and memory usage        |
+| `ppmlx quantize`    | Convert and quantize a model to MLX format           |
+| `ppmlx create`      | Create a custom model from a Modelfile               |
+| `ppmlx logs`        | Query the request log database                       |
+| `ppmlx info <model>`| Show detailed model information                      |
+| `ppmlx estimate <m>`| Estimate RAM requirements before downloading         |
 
 ---
 
@@ -202,15 +202,15 @@ PARAMETER top_p 0.9
 Then build it:
 
 ```bash
-pp-llm create coding-assistant -f Modelfile
-pp-llm run coding-assistant
+ppmlx create coding-assistant -f Modelfile
+ppmlx run coding-assistant
 ```
 
 ---
 
 ## Configuration
 
-pp-llm reads configuration from `~/.pp-llm/config.toml`. All values are optional.
+ppmlx reads configuration from `~/.ppmlx/config.toml`. All values are optional.
 
 ```toml
 [server]
@@ -220,7 +220,7 @@ cors = true             # Enable CORS (default: true)
 cors_origins = ["*"]    # Allowed CORS origins
 
 [models]
-dir = "~/.pp-llm/models"   # Model storage directory
+dir = "~/.ppmlx/models"   # Model storage directory
 default_alias = "llama3"    # Default model for bare requests
 
 [generation]
@@ -230,7 +230,7 @@ top_p = 0.9             # Default top-p
 repetition_penalty = 1.1
 
 [logging]
-db_path = "~/.pp-llm/pp-llm.db"   # SQLite log database
+db_path = "~/.ppmlx/ppmlx.db"   # SQLite log database
 log_requests = true                 # Log all requests
 log_level = "info"                  # Server log level
 ```
@@ -241,7 +241,7 @@ log_level = "info"                  # Server log level
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                    pp-llm CLI                       │
+│                    ppmlx CLI                       │
 │  (typer + rich)                                     │
 │  pull / run / serve / list / rm / quantize / ...    │
 └───────────────────┬─────────────────────────────────┘
@@ -269,7 +269,7 @@ log_level = "info"                  # Server log level
                     │
       ┌─────────────▼──────────────────┐
       │   SQLite Request Log           │
-      │   ~/.pp-llm/pp-llm.db          │
+      │   ~/.ppmlx/ppmlx.db          │
       └────────────────────────────────┘
 ```
 
@@ -280,27 +280,27 @@ log_level = "info"                  # Server log level
 ### Homebrew
 
 ```bash
-brew uninstall pp-llm
-brew untap <org>/pp-llm
+brew uninstall ppmlx
+brew untap <org>/ppmlx
 ```
 
 ### uv
 
 ```bash
-uv tool uninstall pp-llm
+uv tool uninstall ppmlx
 ```
 
 ### pipx
 
 ```bash
-pipx uninstall pp-llm
+pipx uninstall ppmlx
 ```
 
 ### Manual cleanup (all methods)
 
 ```bash
 # Remove downloaded models and config
-rm -rf ~/.pp-llm
+rm -rf ~/.ppmlx
 ```
 
 ---
@@ -316,17 +316,17 @@ rm -rf ~/.pp-llm
 ### Development Setup
 
 ```bash
-git clone https://github.com/<org>/pp-llm
-cd pp-llm
+git clone https://github.com/<org>/ppmlx
+cd ppmlx
 uv sync --python 3.11
-uv run pp-llm --version
+uv run ppmlx --version
 uv run pytest tests/ -v
 ```
 
 ### Project Structure
 
 ```
-pp_llm/
+ppmlx/
   __init__.py       # version
   cli.py            # Typer CLI entry point
   server.py         # FastAPI application
@@ -345,7 +345,7 @@ tests/
 scripts/
   install.sh        # One-liner installer
 homebrew/
-  Formula/pp-llm.rb # Homebrew formula
+  Formula/ppmlx.rb # Homebrew formula
 .github/workflows/
   tests.yml         # CI tests
   release.yml       # PyPI release

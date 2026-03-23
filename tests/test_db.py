@@ -1,15 +1,15 @@
-"""Tests for pp_llm.db — SQLite logging layer."""
+"""Tests for ppmlx.db — SQLite logging layer."""
 from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
 import pytest
 
-from pp_llm.db import Database, get_db, reset_db
+from ppmlx.db import Database, get_db, reset_db
 
 
 def make_db(tmp_path: Path) -> Database:
-    db = Database(tmp_path / "pp-llm.db")
+    db = Database(tmp_path / "ppmlx.db")
     db.init()
     return db
 
@@ -17,7 +17,7 @@ def make_db(tmp_path: Path) -> Database:
 def test_init_creates_tables(tmp_home, tmp_path):
     db = make_db(tmp_path)
     db.flush()
-    conn = sqlite3.connect(str(tmp_path / "pp-llm.db"))
+    conn = sqlite3.connect(str(tmp_path / "ppmlx.db"))
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
     conn.close()
     db.close()
@@ -66,7 +66,7 @@ def test_log_model_event(tmp_home, tmp_path):
     db = make_db(tmp_path)
     db.log_model_event("load", "org/model", model_alias="qwen", duration_ms=500.0, details={"extra": "info"})
     db.flush()
-    conn = sqlite3.connect(str(tmp_path / "pp-llm.db"))
+    conn = sqlite3.connect(str(tmp_path / "ppmlx.db"))
     conn.row_factory = sqlite3.Row
     rows = conn.execute("SELECT * FROM model_events").fetchall()
     conn.close()
@@ -85,7 +85,7 @@ def test_log_system_snapshot(tmp_home, tmp_path):
         uptime_seconds=3600,
     )
     db.flush()
-    conn = sqlite3.connect(str(tmp_path / "pp-llm.db"))
+    conn = sqlite3.connect(str(tmp_path / "ppmlx.db"))
     conn.row_factory = sqlite3.Row
     rows = conn.execute("SELECT * FROM system_snapshots").fetchall()
     conn.close()
@@ -128,12 +128,12 @@ def test_never_raises_on_bad_path():
 
 def test_singleton_reset(tmp_home, tmp_path):
     reset_db()
-    db1 = get_db(tmp_path / "pp-llm.db")
+    db1 = get_db(tmp_path / "ppmlx.db")
     db2_before_reset = get_db()
     assert db1 is db2_before_reset  # same instance
 
     reset_db()
-    db2 = get_db(tmp_path / "pp-llm2.db")
+    db2 = get_db(tmp_path / "ppmlx2.db")
     assert db1 is not db2  # new instance after reset
     db2.close()
 

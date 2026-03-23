@@ -42,9 +42,9 @@ class Config:
     memory: MemoryConfig = field(default_factory=MemoryConfig)
 
 
-def get_pp_llm_dir() -> Path:
-    """Return ~/.pp-llm, creating it if needed."""
-    d = Path.home() / ".pp-llm"
+def get_ppmlx_dir() -> Path:
+    """Return ~/.ppmlx, creating it if needed."""
+    d = Path.home() / ".ppmlx"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -56,7 +56,7 @@ def _parse_bool(v: str) -> bool:
 def load_config(cli_overrides: dict[str, Any] | None = None) -> Config:
     """Load config with priority: CLI overrides > env vars > TOML file > defaults."""
     cfg = Config()
-    toml_path = Path.home() / ".pp-llm" / "config.toml"
+    toml_path = Path.home() / ".ppmlx" / "config.toml"
     try:
         with open(toml_path, "rb") as f:
             data = tomllib.load(f)
@@ -95,18 +95,18 @@ def _apply_toml(cfg: Config, data: dict) -> None:
 
 def _apply_env(cfg: Config) -> None:
     mapping = {
-        "PP_LLM_HOST": ("server", "host", str),
-        "PP_LLM_PORT": ("server", "port", int),
-        "PP_LLM_CORS": ("server", "cors", _parse_bool),
-        "PP_LLM_MAX_LOADED_MODELS": ("server", "max_loaded_models", int),
-        "PP_LLM_DEFAULT_MODEL": ("defaults", "model", str),
-        "PP_LLM_DEFAULT_EMBED_MODEL": ("defaults", "embed_model", str),
-        "PP_LLM_TEMP": ("defaults", "temperature", float),
-        "PP_LLM_TOP_P": ("defaults", "top_p", float),
-        "PP_LLM_MAX_TOKENS": ("defaults", "max_tokens", int),
-        "PP_LLM_LOG_ENABLED": ("logging", "enabled", _parse_bool),
-        "PP_LLM_LOG_SNAPSHOT_INTERVAL": ("logging", "snapshot_interval_seconds", int),
-        "PP_LLM_MEMORY_WIRED_LIMIT": ("memory", "wired_limit_mb", int),
+        "PPMLX_HOST": ("server", "host", str),
+        "PPMLX_PORT": ("server", "port", int),
+        "PPMLX_CORS": ("server", "cors", _parse_bool),
+        "PPMLX_MAX_LOADED_MODELS": ("server", "max_loaded_models", int),
+        "PPMLX_DEFAULT_MODEL": ("defaults", "model", str),
+        "PPMLX_DEFAULT_EMBED_MODEL": ("defaults", "embed_model", str),
+        "PPMLX_TEMP": ("defaults", "temperature", float),
+        "PPMLX_TOP_P": ("defaults", "top_p", float),
+        "PPMLX_MAX_TOKENS": ("defaults", "max_tokens", int),
+        "PPMLX_LOG_ENABLED": ("logging", "enabled", _parse_bool),
+        "PPMLX_LOG_SNAPSHOT_INTERVAL": ("logging", "snapshot_interval_seconds", int),
+        "PPMLX_MEMORY_WIRED_LIMIT": ("memory", "wired_limit_mb", int),
     }
     for env_key, (section, attr, coerce) in mapping.items():
         val = os.environ.get(env_key)

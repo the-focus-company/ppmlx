@@ -34,7 +34,7 @@ class ContentPart(BaseModel):
 class ChatMessage(BaseModel):
     role: Literal["system", "user", "assistant", "tool"]
     content: str | list[ContentPart] | None = None
-    reasoning: str | None = None  # pp-llm extension: populated for <think> models
+    reasoning: str | None = None  # ppmlx extension: populated for <think> models
 
 
 # ── Chat completion request ─────────────────────────────────────────────
@@ -48,7 +48,7 @@ class ChatCompletionRequest(BaseModel):
     stream: bool = False
     stop: str | list[str] | None = None
     seed: int | None = None
-    repetition_penalty: float | None = None  # pp-llm extension
+    repetition_penalty: float | None = None  # ppmlx extension
 
 
 # ── Chat completion response ────────────────────────────────────────────
@@ -159,7 +159,7 @@ class ModelInfo(BaseModel):
     id: str
     object: Literal["model"] = "model"
     created: int = Field(default_factory=now_ts)
-    owned_by: str = "pp-llm"
+    owned_by: str = "ppmlx"
 
 
 class ModelListResponse(BaseModel):

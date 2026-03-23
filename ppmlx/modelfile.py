@@ -176,7 +176,7 @@ def parse_modelfile(text: str, name: str = "") -> ModelfileConfig:
                 i += 1
 
         else:
-            print(f"[pp-llm] Warning: unknown Modelfile directive: {stripped!r}", file=sys.stderr)
+            print(f"[ppmlx] Warning: unknown Modelfile directive: {stripped!r}", file=sys.stderr)
             i += 1
 
     if from_model is None:
@@ -192,16 +192,16 @@ def parse_modelfile(text: str, name: str = "") -> ModelfileConfig:
 
 def _get_modelfiles_dir() -> Path:
     try:
-        from pp_llm.config import get_pp_llm_dir
-        d = get_pp_llm_dir() / "modelfiles"
+        from ppmlx.config import get_ppmlx_dir
+        d = get_ppmlx_dir() / "modelfiles"
     except ImportError:
-        d = Path.home() / ".pp-llm" / "modelfiles"
+        d = Path.home() / ".ppmlx" / "modelfiles"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
 def save_modelfile(name: str, config: ModelfileConfig) -> Path:
-    """Save a ModelfileConfig as JSON to ~/.pp-llm/modelfiles/<name>.json."""
+    """Save a ModelfileConfig as JSON to ~/.ppmlx/modelfiles/<name>.json."""
     config.name = name
     p = _get_modelfiles_dir() / f"{name}.json"
     p.write_text(json.dumps(config.to_dict(), indent=2))

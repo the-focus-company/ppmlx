@@ -1,15 +1,15 @@
-"""Tests for pp_llm.config module."""
+"""Tests for ppmlx.config module."""
 from __future__ import annotations
 
 import pytest
 
-from pp_llm.config import (
+from ppmlx.config import (
     Config,
     DefaultsConfig,
     LoggingConfig,
     MemoryConfig,
     ServerConfig,
-    get_pp_llm_dir,
+    get_ppmlx_dir,
     load_config,
 )
 
@@ -61,7 +61,7 @@ class TestLoadConfigDefaults:
 
 class TestTomlLoading:
     def test_load_from_toml(self, tmp_home):
-        config_dir = tmp_home / ".pp-llm"
+        config_dir = tmp_home / ".ppmlx"
         config_dir.mkdir(parents=True)
         toml_content = """
 [server]
@@ -100,7 +100,7 @@ wired_limit_mb = 1024
         assert cfg.memory.wired_limit_mb == 1024
 
     def test_partial_toml(self, tmp_home):
-        config_dir = tmp_home / ".pp-llm"
+        config_dir = tmp_home / ".ppmlx"
         config_dir.mkdir(parents=True)
         (config_dir / "config.toml").write_text("[server]\nport = 9000\n")
         cfg = load_config()
@@ -108,7 +108,7 @@ wired_limit_mb = 1024
         assert cfg.server.host == "127.0.0.1"
 
     def test_malformed_toml_silently_ignored(self, tmp_home):
-        config_dir = tmp_home / ".pp-llm"
+        config_dir = tmp_home / ".ppmlx"
         config_dir.mkdir(parents=True)
         (config_dir / "config.toml").write_text("this is not valid toml ][[[")
         cfg = load_config()
@@ -117,72 +117,72 @@ wired_limit_mb = 1024
 
 class TestEnvVarOverrides:
     def test_port_env_var(self, tmp_home, monkeypatch):
-        monkeypatch.setenv("PP_LLM_PORT", "9999")
+        monkeypatch.setenv("PPMLX_PORT", "9999")
         cfg = load_config()
         assert cfg.server.port == 9999
 
     def test_host_env_var(self, tmp_home, monkeypatch):
-        monkeypatch.setenv("PP_LLM_HOST", "0.0.0.0")
+        monkeypatch.setenv("PPMLX_HOST", "0.0.0.0")
         cfg = load_config()
         assert cfg.server.host == "0.0.0.0"
 
     def test_cors_false_env_var(self, tmp_home, monkeypatch):
-        monkeypatch.setenv("PP_LLM_CORS", "false")
+        monkeypatch.setenv("PPMLX_CORS", "false")
         cfg = load_config()
         assert cfg.server.cors is False
 
     def test_cors_zero_env_var(self, tmp_home, monkeypatch):
-        monkeypatch.setenv("PP_LLM_CORS", "0")
+        monkeypatch.setenv("PPMLX_CORS", "0")
         cfg = load_config()
         assert cfg.server.cors is False
 
     def test_cors_true_env_var(self, tmp_home, monkeypatch):
-        monkeypatch.setenv("PP_LLM_CORS", "true")
+        monkeypatch.setenv("PPMLX_CORS", "true")
         cfg = load_config()
         assert cfg.server.cors is True
 
     def test_cors_no_env_var(self, tmp_home, monkeypatch):
-        monkeypatch.setenv("PP_LLM_CORS", "no")
+        monkeypatch.setenv("PPMLX_CORS", "no")
         cfg = load_config()
         assert cfg.server.cors is False
 
     def test_max_loaded_models_env_var(self, tmp_home, monkeypatch):
-        monkeypatch.setenv("PP_LLM_MAX_LOADED_MODELS", "5")
+        monkeypatch.setenv("PPMLX_MAX_LOADED_MODELS", "5")
         cfg = load_config()
         assert cfg.server.max_loaded_models == 5
 
     def test_default_model_env_var(self, tmp_home, monkeypatch):
-        monkeypatch.setenv("PP_LLM_DEFAULT_MODEL", "mistral:7b")
+        monkeypatch.setenv("PPMLX_DEFAULT_MODEL", "mistral:7b")
         cfg = load_config()
         assert cfg.defaults.model == "mistral:7b"
 
     def test_temperature_env_var(self, tmp_home, monkeypatch):
-        monkeypatch.setenv("PP_LLM_TEMP", "0.3")
+        monkeypatch.setenv("PPMLX_TEMP", "0.3")
         cfg = load_config()
         assert cfg.defaults.temperature == 0.3
 
     def test_max_tokens_env_var(self, tmp_home, monkeypatch):
-        monkeypatch.setenv("PP_LLM_MAX_TOKENS", "512")
+        monkeypatch.setenv("PPMLX_MAX_TOKENS", "512")
         cfg = load_config()
         assert cfg.defaults.max_tokens == 512
 
     def test_log_enabled_false(self, tmp_home, monkeypatch):
-        monkeypatch.setenv("PP_LLM_LOG_ENABLED", "false")
+        monkeypatch.setenv("PPMLX_LOG_ENABLED", "false")
         cfg = load_config()
         assert cfg.logging.enabled is False
 
     def test_log_snapshot_interval(self, tmp_home, monkeypatch):
-        monkeypatch.setenv("PP_LLM_LOG_SNAPSHOT_INTERVAL", "300")
+        monkeypatch.setenv("PPMLX_LOG_SNAPSHOT_INTERVAL", "300")
         cfg = load_config()
         assert cfg.logging.snapshot_interval_seconds == 300
 
     def test_memory_wired_limit(self, tmp_home, monkeypatch):
-        monkeypatch.setenv("PP_LLM_MEMORY_WIRED_LIMIT", "2048")
+        monkeypatch.setenv("PPMLX_MEMORY_WIRED_LIMIT", "2048")
         cfg = load_config()
         assert cfg.memory.wired_limit_mb == 2048
 
     def test_invalid_env_var_ignored(self, tmp_home, monkeypatch):
-        monkeypatch.setenv("PP_LLM_PORT", "not_a_number")
+        monkeypatch.setenv("PPMLX_PORT", "not_a_number")
         cfg = load_config()
         assert cfg.server.port == 6767
 
@@ -219,35 +219,35 @@ class TestCliOverrides:
 
 class TestPriority:
     def test_cli_overrides_env(self, tmp_home, monkeypatch):
-        monkeypatch.setenv("PP_LLM_PORT", "9000")
+        monkeypatch.setenv("PPMLX_PORT", "9000")
         cfg = load_config(cli_overrides={"port": 7777})
         assert cfg.server.port == 7777
 
     def test_env_overrides_toml(self, tmp_home, monkeypatch):
-        config_dir = tmp_home / ".pp-llm"
+        config_dir = tmp_home / ".ppmlx"
         config_dir.mkdir(parents=True)
         (config_dir / "config.toml").write_text("[server]\nport = 9000\n")
-        monkeypatch.setenv("PP_LLM_PORT", "8888")
+        monkeypatch.setenv("PPMLX_PORT", "8888")
         cfg = load_config()
         assert cfg.server.port == 8888
 
     def test_cli_overrides_toml(self, tmp_home):
-        config_dir = tmp_home / ".pp-llm"
+        config_dir = tmp_home / ".ppmlx"
         config_dir.mkdir(parents=True)
         (config_dir / "config.toml").write_text("[server]\nport = 9000\n")
         cfg = load_config(cli_overrides={"port": 5555})
         assert cfg.server.port == 5555
 
     def test_cli_overrides_env_overrides_toml(self, tmp_home, monkeypatch):
-        config_dir = tmp_home / ".pp-llm"
+        config_dir = tmp_home / ".ppmlx"
         config_dir.mkdir(parents=True)
         (config_dir / "config.toml").write_text("[server]\nport = 9000\n")
-        monkeypatch.setenv("PP_LLM_PORT", "8888")
+        monkeypatch.setenv("PPMLX_PORT", "8888")
         cfg = load_config(cli_overrides={"port": 7777})
         assert cfg.server.port == 7777
 
     def test_toml_overrides_defaults(self, tmp_home):
-        config_dir = tmp_home / ".pp-llm"
+        config_dir = tmp_home / ".ppmlx"
         config_dir.mkdir(parents=True)
         (config_dir / "config.toml").write_text("[server]\nport = 9000\n")
         cfg = load_config()
@@ -257,13 +257,13 @@ class TestPriority:
 
 class TestGetPpLlmDir:
     def test_creates_directory(self, tmp_home):
-        d = get_pp_llm_dir()
+        d = get_ppmlx_dir()
         assert d.exists()
         assert d.is_dir()
-        assert d == tmp_home / ".pp-llm"
+        assert d == tmp_home / ".ppmlx"
 
     def test_idempotent(self, tmp_home):
-        d1 = get_pp_llm_dir()
-        d2 = get_pp_llm_dir()
+        d1 = get_ppmlx_dir()
+        d2 = get_ppmlx_dir()
         assert d1 == d2
         assert d1.exists()

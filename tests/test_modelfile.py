@@ -1,7 +1,7 @@
-"""Tests for pp_llm.modelfile — covers all parsing scenarios."""
+"""Tests for ppmlx.modelfile — covers all parsing scenarios."""
 from __future__ import annotations
 import pytest
-from pp_llm.modelfile import (
+from ppmlx.modelfile import (
     ModelfileConfig,
     ModelfileParseError,
     delete_modelfile,

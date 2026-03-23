@@ -40,7 +40,7 @@ def _resolve_model_path(repo_id: str) -> str:
     for direct HuggingFace loading.
     """
     try:
-        from pp_llm.models import get_model_path
+        from ppmlx.models import get_model_path
         local = get_model_path(repo_id)
         if local:
             return str(local)
@@ -102,7 +102,7 @@ class TextEngine:
     def _emit_event(self, event: str, repo_id: str) -> None:
         """Log model lifecycle event to DB (best-effort)."""
         try:
-            from pp_llm.db import get_db
+            from ppmlx.db import get_db
             get_db().log_model_event(event=event, model_repo=repo_id)
         except Exception:
             pass

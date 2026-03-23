@@ -1,9 +1,9 @@
-"""Tests for pp_llm.models — Model Registry."""
+"""Tests for ppmlx.models — Model Registry."""
 from __future__ import annotations
 import pytest
 from pathlib import Path
 
-from pp_llm.models import (
+from ppmlx.models import (
     DEFAULT_ALIASES,
     ModelNotFoundError,
     all_aliases,
@@ -90,7 +90,7 @@ def test_list_local_models_empty(tmp_home):
 
 def test_list_local_models_with_model(tmp_home):
     # Create a fake model directory with a file
-    models_dir = tmp_home / ".pp-llm" / "models"
+    models_dir = tmp_home / ".ppmlx" / "models"
     fake_model = models_dir / "mlx-community--Qwen3.5-4B-MLX-4bit"
     fake_model.mkdir(parents=True)
     (fake_model / "config.json").write_text('{"model_type": "qwen"}')
@@ -115,7 +115,7 @@ def test_repo_to_local_name():
 
 def test_download_model_already_exists(tmp_home, monkeypatch):
     # Create a pre-existing model directory with content
-    models_dir = tmp_home / ".pp-llm" / "models"
+    models_dir = tmp_home / ".ppmlx" / "models"
     local_path = models_dir / "mlx-community--Qwen3.5-0.8B-OptiQ-4bit"
     local_path.mkdir(parents=True)
     (local_path / "config.json").write_text("{}")
@@ -126,7 +126,7 @@ def test_download_model_already_exists(tmp_home, monkeypatch):
         called.append(kwargs)
         return str(local_path)
 
-    monkeypatch.setattr("pp_llm.models.snapshot_download", fake_snapshot_download, raising=False)
+    monkeypatch.setattr("ppmlx.models.snapshot_download", fake_snapshot_download, raising=False)
 
     # Patch at the huggingface_hub level since download_model imports it
     import huggingface_hub

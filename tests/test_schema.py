@@ -1,9 +1,9 @@
-"""Tests for pp_llm/schema.py — OpenAI-compatible Pydantic v2 models."""
+"""Tests for ppmlx/schema.py — OpenAI-compatible Pydantic v2 models."""
 from __future__ import annotations
 import json
 import pytest
 
-from pp_llm.schema import (
+from ppmlx.schema import (
     ChatMessage,
     ContentPart,
     ImageURL,
@@ -201,7 +201,7 @@ def test_model_list_response():
     assert len(resp.data) == 2
     assert resp.data[0].id == "llama3"
     assert resp.data[0].object == "model"
-    assert resp.data[0].owned_by == "pp-llm"
+    assert resp.data[0].owned_by == "ppmlx"
     assert isinstance(resp.data[0].created, int)
 
 
