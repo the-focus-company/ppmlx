@@ -1,6 +1,8 @@
 from __future__ import annotations
 import json
+import os
 import shutil
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -23,13 +25,6 @@ DEFAULT_ALIASES: dict[str, str] = {
     "qwen3:32b":          "mlx-community/Qwen3-32B-4bit",
     "qwen3:30b-a3b":      "mlx-community/Qwen3-30B-A3B-Instruct-2507-4bit",
     "qwen3-coder:80b-a3b":"mlx-community/Qwen3-Coder-Next-80B-A3B-4bit",
-    # Llama 4
-    "llama4:scout":       "mlx-community/Llama-4-Scout-17B-16E-Instruct-4bit",
-    "llama4:scout-text":  "lmstudio-community/Llama-4-Scout-17B-16E-MLX-text-4bit",
-    "llama4:maverick":    "mlx-community/Llama-4-Maverick-17B-128E-Instruct-4bit",
-    # Llama 3.x
-    "llama3.2:3b":        "mlx-community/Llama-3.2-3B-Instruct-4bit",
-    "llama3.3:70b":       "mlx-community/Llama-3.3-70B-Instruct-4bit",
     # Gemma 3
     "gemma3:4b":          "mlx-community/gemma-3-4b-it-4bit",
     "gemma3:4b-text":     "mlx-community/gemma-3-text-4b-it-4bit",
@@ -56,7 +51,7 @@ DEFAULT_ALIASES: dict[str, str] = {
 }
 
 # Patterns for routing
-_VISION_INDICATORS = ["-VL-", "-vlm", "Qwen3.5-", "gemma-3-", "Llama-4-Scout", "Llama-4-Maverick"]
+_VISION_INDICATORS = ["-VL-", "-vlm", "Qwen3.5-", "gemma-3-"]
 _TEXT_ONLY_INDICATORS = ["-text-", "-Text-", "OptiQ"]
 _EMBED_PREFIXES = ("embed:",)
 
@@ -173,33 +168,86 @@ def repo_to_local_name(repo_id: str) -> str:
     return repo_id.replace("/", "--")
 
 
+def _get_repo_size(repo_id: str, token: str | None = None) -> int | None:
+    """Return total download size in bytes by listing the repo tree. Returns None on failure."""
+    try:
+        from huggingface_hub import list_repo_tree
+        return sum(
+            getattr(f, "size", 0) or 0
+            for f in list_repo_tree(repo_id, token=token, recursive=True)
+        )
+    except Exception:
+        return None
+
+
 def download_model(alias_or_repo: str, token: str | None = None) -> Path:
     """
-    Download a model from HuggingFace Hub.
+    Download a model from HuggingFace Hub with a uv-style Rich progress bar.
     Returns local path.
     """
-    from huggingface_hub import snapshot_download
+    from rich.progress import (
+        Progress, BarColumn, DownloadColumn,
+        TransferSpeedColumn, TimeRemainingColumn, TextColumn,
+    )
 
     repo_id = resolve_alias(alias_or_repo)
     local_name = repo_to_local_name(repo_id)
-    models_dir = _get_models_dir()
-    local_path = models_dir / local_name
+    local_path = _get_models_dir() / local_name
 
     if local_path.exists() and any(local_path.iterdir()):
         return local_path
 
     local_path.mkdir(parents=True, exist_ok=True)
+    total = _get_repo_size(repo_id, token)
 
-    try:
-        snapshot_download(
-            repo_id=repo_id,
-            local_dir=str(local_path),
-            token=token,
-            ignore_patterns=["*.md", "*.txt", "original/*"],
-        )
-    except Exception as e:
-        shutil.rmtree(local_path, ignore_errors=True)
-        raise ModelNotFoundError(f"Failed to download '{repo_id}': {e}") from e
+    stop = threading.Event()
+
+    with Progress(
+        TextColumn("[bold blue]{task.description}"),
+        BarColumn(),
+        DownloadColumn(),
+        TransferSpeedColumn(),
+        TimeRemainingColumn(),
+        refresh_per_second=1,
+        transient=False,
+    ) as progress:
+        task = progress.add_task(f"↓ {alias_or_repo}", total=total)
+
+        def _monitor() -> None:
+            while not stop.is_set():
+                try:
+                    sz = sum(f.stat().st_size for f in local_path.rglob("*") if f.is_file())
+                    progress.update(task, completed=sz)
+                except Exception:
+                    pass
+                stop.wait(1.0)
+
+        t = threading.Thread(target=_monitor, daemon=True)
+        t.start()
+
+        # Suppress huggingface_hub's own tqdm bars while our progress bar is active
+        prev_tqdm = os.environ.get("TQDM_DISABLE")
+        os.environ["TQDM_DISABLE"] = "1"
+        try:
+            from huggingface_hub import snapshot_download
+            snapshot_download(
+                repo_id=repo_id,
+                local_dir=str(local_path),
+                token=token,
+                ignore_patterns=["*.md", "*.txt", "original/*"],
+            )
+        except Exception as e:
+            shutil.rmtree(local_path, ignore_errors=True)
+            raise ModelNotFoundError(f"Failed to download '{repo_id}': {e}") from e
+        finally:
+            if prev_tqdm is None:
+                os.environ.pop("TQDM_DISABLE", None)
+            else:
+                os.environ["TQDM_DISABLE"] = prev_tqdm
+            stop.set()
+            t.join(timeout=2)
+            if total:
+                progress.update(task, completed=total)
 
     return local_path
 

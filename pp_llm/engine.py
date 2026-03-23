@@ -157,7 +157,7 @@ class TextEngine:
             "prompt": prompt,
             "max_tokens": max_tokens,
             "verbose": False,
-            "temp": temperature,
+            "temperature": temperature,
             "top_p": top_p,
         }
         if seed is not None:
@@ -204,7 +204,7 @@ class TextEngine:
         kwargs: dict[str, Any] = {
             "prompt": prompt,
             "max_tokens": max_tokens,
-            "temp": temperature,
+            "temperature": temperature,
             "top_p": top_p,
         }
         if seed is not None:

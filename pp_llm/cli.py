@@ -42,6 +42,7 @@ def serve(
     model: Optional[str] = typer.Option(None, "--model", "-m", help="Pre-load a model on startup"),
     embed_model: Optional[str] = typer.Option(None, "--embed-model", help="Pre-load an embedding model"),
     no_cors: bool = typer.Option(False, "--no-cors", help="Disable CORS"),
+    interactive: bool = typer.Option(False, "--interactive", "-i", help="Interactively select a model to serve"),
 ):
     """Start the OpenAI-compatible API server."""
     import uvicorn
@@ -57,6 +58,20 @@ def serve(
     effective_host = host or cfg.server.host
     effective_port = port or cfg.server.port
 
+    # Interactive model selection
+    if interactive and model is None:
+        import questionary
+        from pp_llm.models import list_local_models
+        local = list_local_models()
+        if local:
+            choices = [questionary.Choice("(none — lazy load on first request)", value=None)]
+            for m in local:
+                label = f"{m['alias']:<22} {m['size_gb']:.1f} GB"
+                choices.append(questionary.Choice(label, value=m["alias"]))
+            model = questionary.select("Select model to pre-load:", choices=choices).ask()
+        else:
+            console.print("[dim]No local models found. Download one first: pp-llm pull[/dim]")
+
     console.print(Panel(
         f"[bold green]pp-llm server v{__version__}[/bold green]\n"
         f"   Listening on [link]http://{effective_host}:{effective_port}[/link]\n"
@@ -70,6 +85,19 @@ def serve(
         f"   SQLite log: ~/.pp-llm/pp-llm.db",
         title="pp-llm",
         border_style="green",
+    ))
+
+    # IDE connection hint
+    selected_model = model or "(any — set model in your IDE)"
+    console.print(Panel(
+        f"[bold]API base:[/bold]  http://{effective_host}:{effective_port}/v1\n"
+        f"[bold]Model:[/bold]     {selected_model}\n"
+        f"[bold]API key:[/bold]   (not required — use any string)\n\n"
+        f"[dim]Cursor[/dim]   → Settings › AI › OpenAI-compatible\n"
+        f"[dim]Continue[/dim] → config.json: provider 'openai', apiBase above\n"
+        f"[dim]Aider[/dim]    → --openai-api-base http://{effective_host}:{effective_port}/v1",
+        title="Connect your IDE",
+        border_style="blue",
     ))
 
     uvicorn.run(
@@ -173,31 +201,63 @@ def run(
         messages.append({"role": "assistant", "content": full_response})
 
 
-@app.command()
-def pull(
-    model: str = typer.Argument(..., help="Model alias or HuggingFace repo ID"),
-    token: Optional[str] = typer.Option(None, "--token", help="HuggingFace token"),
-):
-    """Download a model from HuggingFace Hub."""
+def _do_pull(model: str, token: Optional[str]) -> bool:
+    """Download a single model and print result. Returns True on success."""
     from pp_llm.models import download_model, resolve_alias, ModelNotFoundError
-    from pp_llm.memory import check_memory_warning, get_system_ram_gb
+    from pp_llm.memory import check_memory_warning
 
     try:
         repo_id = resolve_alias(model)
     except ModelNotFoundError as e:
         console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        return False
 
     console.print(f"[blue]Pulling [bold]{model}[/bold] ({repo_id})[/blue]")
-
     try:
         local_path = download_model(model, token=token)
-        console.print(f"[green]Downloaded to {local_path}[/green]")
+        console.print(f"[green]✓ Downloaded to {local_path}[/green]")
         warning = check_memory_warning(local_path)
         if warning:
             console.print(f"[yellow]{warning}[/yellow]")
+        return True
     except Exception as e:
         console.print(f"[red]Pull failed: {e}[/red]")
+        return False
+
+
+@app.command()
+def pull(
+    model: Optional[str] = typer.Argument(None, help="Model alias or HuggingFace repo ID (omit for interactive selector)"),
+    token: Optional[str] = typer.Option(None, "--token", help="HuggingFace token"),
+):
+    """Download a model from HuggingFace Hub (interactive multiselect when no model given)."""
+    if model is None:
+        import questionary
+        from pp_llm.models import DEFAULT_ALIASES, list_local_models
+
+        local_repos = {m["repo_id"] for m in list_local_models()}
+        choices = []
+        for alias, repo in DEFAULT_ALIASES.items():
+            if alias.startswith("embed:"):
+                continue
+            tick = " ✓" if repo in local_repos else ""
+            label = f"{alias:<24} {repo}{tick}"
+            choices.append(questionary.Choice(label, value=alias))
+
+        selected = questionary.checkbox(
+            "Select models to download  (Space=toggle, Enter=confirm, Ctrl-C=cancel):",
+            choices=choices,
+        ).ask()
+
+        if not selected:
+            console.print("[dim]Nothing selected.[/dim]")
+            return
+
+        for m in selected:
+            _do_pull(m, token)
+        return
+
+    if not _do_pull(model, token):
         raise typer.Exit(1)
 
 
