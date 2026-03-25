@@ -105,7 +105,11 @@ def _build_model_records(
     for m in local_models:
         local_by_repo[m["repo_id"]] = m
 
-    records: dict[str, ModelRecord] = {}
+    # Source priority: custom > built-in > registry
+    _SOURCE_PRIO = {"custom": 0, "built-in": 1, "registry": 2, "local-only": 3}
+
+    # Group by repo_id, keeping only the best alias per repo.
+    by_repo: dict[str, ModelRecord] = {}
     for alias, repo_id in aliases.items():
         lm = local_by_repo.get(repo_id)
         reg_entry = reg.get(alias, {})
@@ -116,7 +120,7 @@ def _build_model_records(
         elif alias in DEFAULT_ALIASES:
             source = "built-in"
 
-        records[alias] = ModelRecord(
+        candidate = ModelRecord(
             alias=alias,
             repo_id=repo_id,
             is_favorite=alias in fav_set,
@@ -132,13 +136,44 @@ def _build_model_records(
             source=source,
         )
 
+        existing = by_repo.get(repo_id)
+        if existing is None:
+            by_repo[repo_id] = candidate
+        else:
+            # Pick best alias: higher source priority wins, then shorter name.
+            e_prio = _SOURCE_PRIO.get(existing.source, 9)
+            c_prio = _SOURCE_PRIO.get(candidate.source, 9)
+            if (c_prio, len(alias)) < (e_prio, len(existing.alias)):
+                # Carry over fields the new candidate might lack.
+                if candidate.params_b is None:
+                    candidate.params_b = existing.params_b
+                if candidate.size_gb is None:
+                    candidate.size_gb = existing.size_gb
+                if candidate.lab is None:
+                    candidate.lab = existing.lab
+                if not candidate.is_favorite and existing.is_favorite:
+                    candidate.is_favorite = True
+                by_repo[repo_id] = candidate
+            else:
+                # Keep existing but merge any missing metadata from candidate.
+                if existing.params_b is None:
+                    existing.params_b = candidate.params_b
+                if existing.size_gb is None:
+                    existing.size_gb = candidate.size_gb
+                if existing.lab is None:
+                    existing.lab = candidate.lab
+                if not existing.is_favorite and candidate.is_favorite:
+                    existing.is_favorite = True
+
+    records = dict(by_repo)
+
     # Local-only models (downloaded but not in any alias map)
     alias_repos = set(aliases.values())
     for m in local_models:
         if m["repo_id"] not in alias_repos:
             alias = m.get("alias") or m["repo_id"]
-            if alias not in records:
-                records[alias] = ModelRecord(
+            if m["repo_id"] not in records:
+                records[m["repo_id"]] = ModelRecord(
                     alias=alias,
                     repo_id=m["repo_id"],
                     is_favorite=alias in fav_set,
@@ -597,7 +632,14 @@ def _launch_coding_tool(action: str, model: str, host: str, port: int) -> None:
     proc = _start_server_bg(model, host, port)
     console.print(f"[dim]Starting ppmlx server on {host}:{port}...[/dim]")
 
-    if not _wait_server_ready(host, port, proc):
+    try:
+        ready = _wait_server_ready(host, port, proc)
+    except KeyboardInterrupt:
+        proc.terminate()
+        console.print("\n[yellow]Cancelled.[/yellow]")
+        raise typer.Exit(1)
+
+    if not ready:
         stderr_output = ""
         if proc.stderr:
             stderr_output = proc.stderr.read().decode(errors="replace").strip()
@@ -746,7 +788,7 @@ def _model_selector_tui(local_models: list) -> str | None:
             elif key in (curses.KEY_ENTER, 10, 13):
                 result[0] = items[idx]["alias"]
                 break
-            elif key in (27, ord("q"), ord("Q")):
+            elif key in (27, ord("q"), ord("Q"), 3):  # 3 = Ctrl-C
                 cancelled[0] = True
                 break
 
@@ -975,6 +1017,9 @@ def run(
         console.print(f"[yellow]Model not found locally. Downloading {model}...[/yellow]")
         try:
             local_path = download_model(model)
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Download cancelled.[/yellow]")
+            raise typer.Exit(1)
         except Exception as e:
             console.print(f"[red]Download failed: {e}[/red]")
             raise typer.Exit(1)
@@ -1418,6 +1463,11 @@ def run(
                                 console.print(chunk, end="")
                                 full_response += chunk
                     console.print()
+            except KeyboardInterrupt:
+                console.print("\n[dim]Generation interrupted.[/dim]")
+                if history_enabled:
+                    messages.pop()
+                continue
             except Exception as exc:
                 console.print(f"\n[red]Error: {exc}[/red]")
                 if history_enabled:
@@ -1450,6 +1500,9 @@ def _do_pull(model: str, token: Optional[str]) -> bool:
         if warning:
             console.print(f"[yellow]{warning}[/yellow]")
         return True
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Download cancelled.[/yellow]")
+        return False
     except Exception as e:
         console.print(f"[red]Pull failed: {e}[/red]")
         return False

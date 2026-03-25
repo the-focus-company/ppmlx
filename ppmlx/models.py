@@ -17,9 +17,7 @@ DEFAULT_ALIASES: dict[str, str] = {
     "qwen3.5:27b":        "mlx-community/Qwen3.5-27B-4bit",
     "qwen3.5:35b-a3b":    "mlx-community/Qwen3.5-35B-A3B-4bit",
     "qwen3.5:122b-a10b":  "mlx-community/Qwen3.5-122B-A10B-4bit",
-    # GLM-4 — THUDM / mlx-community
-    "glm4:flash":         "mlx-community/GLM-4.7-Flash-4bit",
-    "glm4":               "mlx-community/GLM-4.7-Flash-4bit",
+    # GLM-4 — THUDM / mlx-community (matches Ollama naming)
     "glm-4.7-flash":      "mlx-community/GLM-4.7-Flash-4bit",
     # GPT-OSS (OpenAI open weights) — released Aug 2025
     "gpt-oss:20b":        "mlx-community/gpt-oss-20b-4bit",
