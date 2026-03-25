@@ -23,7 +23,7 @@ DEFAULT_ALIASES: dict[str, str] = {
 }
 
 # Patterns for routing
-_VISION_INDICATORS = ["-VL-", "-vlm", "Qwen3.5-"]
+_VISION_INDICATORS = ["-VL-", "-vlm"]
 _TEXT_ONLY_INDICATORS = ["-text-", "-Text-", "OptiQ"]
 _EMBED_PREFIXES = ("embed:",)
 
@@ -80,9 +80,75 @@ def remove_user_alias(name: str) -> bool:
     return False
 
 
+# ── Favorites ────────────────────────────────────────────────────────────
+
+def _get_favorites_file() -> Path:
+    return _get_ppmlx_dir() / "favorites.json"
+
+
+def load_favorites() -> list[str]:
+    """Load the ordered list of favorite model aliases."""
+    p = _get_favorites_file()
+    if p.exists():
+        try:
+            data = json.loads(p.read_text())
+            if isinstance(data, list):
+                return data
+        except Exception:
+            pass
+    return []
+
+
+def _save_favorites(favs: list[str]) -> None:
+    p = _get_favorites_file()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(favs, indent=2))
+
+
+def add_favorite(alias_or_repo: str) -> bool:
+    """Add a model to favorites. Returns False if already a favorite."""
+    favs = load_favorites()
+    if alias_or_repo in favs:
+        return False
+    favs.append(alias_or_repo)
+    _save_favorites(favs)
+    return True
+
+
+def remove_favorite(alias_or_repo: str) -> bool:
+    """Remove a model from favorites. Returns True if it was present."""
+    favs = load_favorites()
+    if alias_or_repo in favs:
+        favs.remove(alias_or_repo)
+        _save_favorites(favs)
+        return True
+    return False
+
+
+def _is_registry_enabled() -> bool:
+    """Check if the registry is enabled in config."""
+    try:
+        from ppmlx.config import load_config
+        return load_config().registry.enabled
+    except Exception:
+        return True
+
+
+def _get_registry_aliases() -> dict[str, str]:
+    """Return registry aliases if enabled, else empty dict."""
+    if not _is_registry_enabled():
+        return {}
+    try:
+        from ppmlx.registry import registry_aliases
+        return registry_aliases()
+    except Exception:
+        return {}
+
+
 def all_aliases() -> dict[str, str]:
-    """Return merged dict: user aliases override defaults."""
-    merged = dict(DEFAULT_ALIASES)
+    """Return merged dict: registry < defaults < user (user wins)."""
+    merged = _get_registry_aliases()
+    merged.update(DEFAULT_ALIASES)
     merged.update(load_user_aliases())
     return merged
 
@@ -91,12 +157,16 @@ def resolve_alias(name: str) -> str:
     """
     Resolve a model name to a HuggingFace repo ID.
 
-    1. If name contains '/' -> direct repo ID, return as-is
-    2. Check user aliases
-    3. Check DEFAULT_ALIASES
-    4. Prefix match (e.g. 'qwen3.5' -> smallest qwen3.5 variant)
-    5. Raise ModelNotFoundError with helpful message
+    Priority: direct repo ID > user aliases > DEFAULT_ALIASES > registry > prefix match > error
     """
+    # Strip provider prefix so that clients like pi that send
+    # provider-qualified model names still resolve.
+    # Supports both "ppmlx:model" and "ppmlx/model" formats.
+    if name.startswith("ppmlx:"):
+        name = name[len("ppmlx:"):]
+    elif name.startswith("ppmlx/"):
+        name = name[len("ppmlx/"):]
+
     if "/" in name:
         return name
 
@@ -106,13 +176,19 @@ def resolve_alias(name: str) -> str:
     if name in DEFAULT_ALIASES:
         return DEFAULT_ALIASES[name]
 
-    # Prefix match: find smallest variant
-    matches = [(k, v) for k, v in DEFAULT_ALIASES.items() if k.startswith(name + ":") or k == name]
+    # Check registry
+    reg = _get_registry_aliases()
+    if name in reg:
+        return reg[name]
+
+    # Prefix match across all alias sources
+    all_a = {**reg, **DEFAULT_ALIASES, **user}
+    matches = [(k, v) for k, v in all_a.items() if k.startswith(name + ":") or k == name]
     if matches:
         matches.sort(key=lambda x: x[0])
         return matches[0][1]
 
-    available = sorted({**DEFAULT_ALIASES, **user}.keys())
+    available = sorted(all_a.keys())
     raise ModelNotFoundError(
         f"Unknown model: '{name}'\n"
         f"Available aliases: {', '.join(available[:10])}{'...' if len(available) > 10 else ''}\n"
@@ -178,6 +254,8 @@ def download_model(alias_or_repo: str, token: str | None = None) -> Path:
     from rich.progress import (
         Progress, BarColumn, DownloadColumn, TransferSpeedColumn, TimeRemainingColumn, TextColumn,
     )
+    from huggingface_hub import snapshot_download
+    from tqdm.auto import tqdm as _tqdm_base
 
     token = _get_hf_token(token)
     repo_id = resolve_alias(alias_or_repo)
@@ -190,30 +268,29 @@ def download_model(alias_or_repo: str, token: str | None = None) -> Path:
     local_path.mkdir(parents=True, exist_ok=True)
     total = _get_repo_size(repo_id, token)
 
-    from huggingface_hub import snapshot_download
-    try:
-        from huggingface_hub.file_download import base_tqdm as _tqdm_base
-    except ImportError:
-        from tqdm import tqdm as _tqdm_base  # type: ignore[assignment]
-
     with Progress(
         TextColumn("[bold blue]{task.description}"),
-        BarColumn(),
+        BarColumn(bar_width=None),
         DownloadColumn(),
         TransferSpeedColumn(),
         TimeRemainingColumn(),
-        refresh_per_second=10,
-        transient=False,
+        refresh_per_second=2,
     ) as progress:
         task = progress.add_task(f"↓ {alias_or_repo}", total=total)
 
         class _RichTqdm(_tqdm_base):  # type: ignore[valid-type]
-            """Forwards byte-level updates to the Rich progress bar."""
+            def __init__(self, *args, **kwargs):
+                kwargs.pop("name", None)
+                kwargs["mininterval"] = 0.5
+                super().__init__(*args, **kwargs)
+
             def display(self, *args, **kwargs) -> None:
-                pass  # suppress tqdm's own output
+                pass
+
+            def close(self) -> None:
+                pass
 
             def update(self, n: int = 1) -> None:
-                super().update(n)
                 if n and n > 0:
                     progress.update(task, advance=int(n))
 

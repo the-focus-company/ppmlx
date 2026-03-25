@@ -9,6 +9,6 @@ echo "Uninstalling ppmlx..."
 uv tool uninstall ppmlx 2>/dev/null || true
 
 echo "Installing from ${REPO_ROOT}..."
-uv tool install "${REPO_ROOT}" --python 3.11
+uv tool install -e "${REPO_ROOT}" --python 3.11 --force
 
 echo "Done. $(ppmlx --version)"

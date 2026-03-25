@@ -24,13 +24,25 @@ def _strip_thinking(text: str) -> tuple[str, str | None]:
     """
     Strip <think>...</think> blocks from text.
     Returns (answer_text, reasoning_text | None).
-    reasoning_text is the content between <think> and </think>.
+
+    Handles two cases:
+    1. Standard: ``<think>reasoning</think>answer``
+    2. Template-injected: output starts *inside* a think block (Qwen3 adds
+       ``<think>\\n`` to the generation prompt, so the model output begins with
+       the reasoning directly followed by ``</think>``).
     """
     match = _THINK_PATTERN.search(text)
     if match:
         reasoning = match.group(1).strip()
         answer = _THINK_PATTERN.sub("", text).strip()
         return answer, reasoning
+    # Fallback: no opening <think> but a closing </think> exists — the model
+    # started inside a think block injected by the chat template.
+    end_idx = text.find("</think>")
+    if end_idx != -1:
+        reasoning = text[:end_idx].strip()
+        answer = text[end_idx + len("</think>"):].strip()
+        return answer, (reasoning or None)
     return text, None
 
 
@@ -108,7 +120,8 @@ class TextEngine:
             pass
 
     def _apply_chat_template(
-        self, lm: LoadedModel, messages: list[dict], enable_thinking: bool = True
+        self, lm: LoadedModel, messages: list[dict],
+        enable_thinking: bool = True, tools: list[dict] | None = None,
     ) -> str:
         """Apply the model's chat template to produce a prompt string."""
         tokenizer = lm.tokenizer
@@ -117,16 +130,23 @@ class TextEngine:
                 "tokenize": False,
                 "add_generation_prompt": True,
             }
+            if tools:
+                kwargs["tools"] = tools
             if not enable_thinking:
-                # Supported by Qwen3 and some other thinking models.
-                # Ignored (TypeError) by models that don't recognise the kwarg.
                 try:
                     return tokenizer.apply_chat_template(
                         messages, **kwargs, enable_thinking=False
                     )
                 except TypeError:
                     pass  # model doesn't support the flag — fall through
-            return tokenizer.apply_chat_template(messages, **kwargs)
+            try:
+                return tokenizer.apply_chat_template(messages, **kwargs)
+            except TypeError:
+                # Tokenizer doesn't support 'tools' kwarg — retry without it
+                if tools and "tools" in kwargs:
+                    del kwargs["tools"]
+                    return tokenizer.apply_chat_template(messages, **kwargs)
+                raise
         # Fallback: simple concatenation
         parts = []
         for msg in messages:
@@ -152,6 +172,7 @@ class TextEngine:
         repetition_penalty: float | None = None,
         strip_thinking: bool = True,
         enable_thinking: bool = True,
+        tools: list[dict] | None = None,
     ) -> tuple[str, str | None, int, int]:
         """
         Generate a response.
@@ -164,7 +185,7 @@ class TextEngine:
         from mlx_lm import generate as mlx_generate
 
         lm = self._get_or_load(repo_id)
-        prompt = self._apply_chat_template(lm, messages, enable_thinking=enable_thinking)
+        prompt = self._apply_chat_template(lm, messages, enable_thinking=enable_thinking, tools=tools)
 
         try:
             from mlx_lm.sample_utils import make_sampler
@@ -209,17 +230,19 @@ class TextEngine:
         seed: int | None = None,
         repetition_penalty: float | None = None,
         enable_thinking: bool = True,
+        strip_thinking: bool = True,
+        tools: list[dict] | None = None,
     ) -> Iterator[str]:
         """
         Stream token-by-token generation.
-        Yields text chunks. Handles <think> tags by yielding them transparently
-        (caller can strip if needed).
+        Yields text chunks. When strip_thinking=True (default), <think>...</think>
+        blocks are silently consumed and not yielded.
         enable_thinking=False suppresses the thinking phase for models that support it (e.g. Qwen3).
         """
         from mlx_lm import stream_generate as mlx_stream
 
         lm = self._get_or_load(repo_id)
-        prompt = self._apply_chat_template(lm, messages, enable_thinking=enable_thinking)
+        prompt = self._apply_chat_template(lm, messages, enable_thinking=enable_thinking, tools=tools)
 
         try:
             from mlx_lm.sample_utils import make_sampler
@@ -235,11 +258,75 @@ class TextEngine:
         if seed is not None:
             kwargs["seed"] = seed
 
+        if not strip_thinking:
+            for response in mlx_stream(lm.model, lm.tokenizer, **kwargs):
+                if hasattr(response, "text"):
+                    yield response.text
+                elif isinstance(response, str):
+                    yield response
+            return
+
+        # State machine to strip <think>...</think> blocks from streamed tokens.
+        # Buffers partial tag matches and only yields text outside think blocks.
+        # Qwen3's chat template injects "<think>\n" into the generation prompt,
+        # so the model output begins *inside* a think block.
+        inside_think = bool(re.search(r"<think>\s*$", prompt))
+        buf = ""
+
         for response in mlx_stream(lm.model, lm.tokenizer, **kwargs):
-            if hasattr(response, "text"):
-                yield response.text
-            elif isinstance(response, str):
-                yield response
+            chunk = response.text if hasattr(response, "text") else response
+            buf += chunk
+
+            while buf:
+                if inside_think:
+                    # Look for </think> closing tag
+                    end_idx = buf.find("</think>")
+                    if end_idx != -1:
+                        # Skip everything up to and including </think>
+                        buf = buf[end_idx + len("</think>"):]
+                        inside_think = False
+                        continue
+                    # Check if buf ends with a partial match for </think>
+                    # Keep the tail that could be a prefix of "</think>"
+                    tag = "</think>"
+                    keep = 0
+                    for i in range(1, min(len(tag), len(buf)) + 1):
+                        if buf.endswith(tag[:i]):
+                            keep = i
+                    buf = buf[-keep:] if keep else ""
+                    break
+                else:
+                    # Look for <think> opening tag
+                    start_idx = buf.find("<think>")
+                    if start_idx != -1:
+                        # Yield everything before the tag
+                        if start_idx > 0:
+                            yield buf[:start_idx]
+                        buf = buf[start_idx + len("<think>"):]
+                        inside_think = True
+                        continue
+                    # Check if buf ends with a partial match for "<think>"
+                    tag = "<think>"
+                    keep = 0
+                    for i in range(1, min(len(tag), len(buf)) + 1):
+                        if buf.endswith(tag[:i]):
+                            keep = i
+                    if keep:
+                        # Yield everything before the potential partial tag
+                        safe = buf[:-keep]
+                        if safe:
+                            yield safe
+                        buf = buf[-keep:]
+                    else:
+                        # No partial match — yield everything
+                        if buf:
+                            yield buf
+                        buf = ""
+                    break
+
+        # Flush any remaining buffer (partial tag that never completed)
+        if buf and not inside_think:
+            yield buf
 
     def unload(self, repo_id: str) -> bool:
         """Unload a specific model from cache. Returns True if it was loaded."""

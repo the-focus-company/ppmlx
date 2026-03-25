@@ -4,7 +4,7 @@ import os
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -13,6 +13,10 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich import print as rprint
+try:
+    import setproctitle as _setproctitle_mod
+except ImportError:
+    _setproctitle_mod = None  # type: ignore[assignment]
 
 app = typer.Typer(
     name="ppmlx",
@@ -47,25 +51,246 @@ _LAUNCH_ITEMS: list[_LaunchItem] = [
 ]
 
 
+# ── Unified model record & table builder ─────────────────────────────
+
+@dataclass
+class ModelRecord:
+    alias: str
+    repo_id: str
+    is_favorite: bool = False
+    is_downloaded: bool = False
+    is_loaded: bool = False
+    size_gb: float | None = None
+    local_path: Path | None = None
+    params_b: float | None = None
+    model_type: str | None = None   # "dense" | "sparse"
+    lab: str | None = None
+    modalities: str | None = None
+    downloads: int | None = None
+    released: str | None = None
+    source: str = "registry"        # "built-in" | "custom" | "registry" | "local-only"
+
+
+def _build_model_records(
+    *,
+    filter_downloaded: bool | None = None,
+    filter_favorites: bool = False,
+    filter_text: str | None = None,
+    filter_lab: str | None = None,
+    filter_modality: str | None = None,
+    filter_type: str | None = None,
+    sort_by: str = "alias",
+    limit: int | None = None,
+    exclude_embed: bool = True,
+) -> list[ModelRecord]:
+    """Build a unified list of model records from all sources."""
+    from ppmlx.models import (
+        all_aliases, DEFAULT_ALIASES, load_user_aliases,
+        list_local_models, load_favorites,
+    )
+
+    try:
+        from ppmlx.registry import registry_entries
+        reg = registry_entries()
+    except Exception:
+        reg = {}
+
+    aliases = all_aliases()
+    user_aliases = load_user_aliases()
+    local_models = list_local_models()
+    favorites_list = load_favorites()
+    fav_set = set(favorites_list)
+
+    local_by_repo: dict[str, dict] = {}
+    for m in local_models:
+        local_by_repo[m["repo_id"]] = m
+
+    records: dict[str, ModelRecord] = {}
+    for alias, repo_id in aliases.items():
+        lm = local_by_repo.get(repo_id)
+        reg_entry = reg.get(alias, {})
+
+        source = "registry"
+        if alias in user_aliases:
+            source = "custom"
+        elif alias in DEFAULT_ALIASES:
+            source = "built-in"
+
+        records[alias] = ModelRecord(
+            alias=alias,
+            repo_id=repo_id,
+            is_favorite=alias in fav_set,
+            is_downloaded=lm is not None,
+            size_gb=lm["size_gb"] if lm else reg_entry.get("size_gb"),
+            local_path=lm["path"] if lm else None,
+            params_b=reg_entry.get("params_b") or None,
+            model_type=reg_entry.get("type"),
+            lab=reg_entry.get("lab"),
+            modalities=reg_entry.get("modalities"),
+            downloads=reg_entry.get("downloads"),
+            released=reg_entry.get("created"),
+            source=source,
+        )
+
+    # Local-only models (downloaded but not in any alias map)
+    alias_repos = set(aliases.values())
+    for m in local_models:
+        if m["repo_id"] not in alias_repos:
+            alias = m.get("alias") or m["repo_id"]
+            if alias not in records:
+                records[alias] = ModelRecord(
+                    alias=alias,
+                    repo_id=m["repo_id"],
+                    is_favorite=alias in fav_set,
+                    is_downloaded=True,
+                    size_gb=m["size_gb"],
+                    local_path=m["path"],
+                    source="local-only",
+                )
+
+    result = list(records.values())
+
+    if exclude_embed:
+        result = [r for r in result if not r.alias.startswith("embed:")]
+    if filter_downloaded is True:
+        result = [r for r in result if r.is_downloaded]
+    elif filter_downloaded is False:
+        result = [r for r in result if not r.is_downloaded]
+    if filter_favorites:
+        result = [r for r in result if r.is_favorite]
+    if filter_text:
+        q = filter_text.lower()
+        result = [r for r in result if q in f"{r.alias} {r.repo_id} {r.lab or ''}".lower()]
+    if filter_lab:
+        q = filter_lab.lower()
+        result = [r for r in result if q in (r.lab or "").lower()]
+    if filter_modality:
+        q = filter_modality.lower()
+        result = [r for r in result if q in (r.modalities or "").lower()]
+    if filter_type:
+        q = filter_type.lower()
+        result = [r for r in result if (r.model_type or "").lower() == q]
+
+    sort_keys = {
+        "alias":     lambda r: r.alias,
+        "downloads": lambda r: -(r.downloads or 0),
+        "size":      lambda r: -(r.size_gb or 0),
+        "params":    lambda r: -(r.params_b or 0),
+        "created":   lambda r: r.released or "",
+        "name":      lambda r: r.alias,
+    }
+    result.sort(key=lambda r: (not r.is_favorite, sort_keys.get(sort_by, sort_keys["alias"])(r)))
+
+    if limit:
+        result = result[:limit]
+    return result
+
+
+def _model_table(
+    records: list[ModelRecord],
+    *,
+    title: str = "Models",
+    show_status: bool = True,
+    show_params: bool = False,
+    show_size: bool = True,
+    show_type: bool = False,
+    show_lab: bool = False,
+    show_modalities: bool = False,
+    show_downloads: bool = False,
+    show_released: bool = False,
+    show_repo: bool = False,
+    show_source: bool = False,
+    show_path: bool = False,
+) -> Table:
+    """Build a Rich Table from ModelRecords with configurable columns."""
+    table = Table(title=title, show_header=True)
+
+    if show_status:
+        table.add_column("", width=3)
+    table.add_column("Alias", style="cyan", no_wrap=True)
+    if show_params:
+        table.add_column("Params", justify="right", style="magenta")
+    if show_size:
+        table.add_column("Size", justify="right")
+    if show_type:
+        table.add_column("Type", style="dim")
+    if show_lab:
+        table.add_column("Lab", style="green")
+    if show_modalities:
+        table.add_column("Modalities", style="blue")
+    if show_downloads:
+        table.add_column("Downloads", justify="right")
+    if show_released:
+        table.add_column("Released", style="dim")
+    if show_repo:
+        table.add_column("HuggingFace Repo", style="green")
+    if show_source:
+        table.add_column("Source", style="dim")
+    if show_path:
+        table.add_column("Path", style="dim")
+
+    for r in records:
+        row: list[str] = []
+        if show_status:
+            flags = ""
+            if r.is_favorite:
+                flags += "★"
+            if r.is_downloaded:
+                flags += "✓"
+            if r.is_loaded:
+                flags += "●"
+            row.append(flags)
+        row.append(r.alias)
+        if show_params:
+            row.append(f"{r.params_b}B" if r.params_b else "—")
+        if show_size:
+            row.append(f"{r.size_gb:.1f} GB" if r.size_gb else "—")
+        if show_type:
+            row.append(r.model_type or "—")
+        if show_lab:
+            row.append(r.lab or "—")
+        if show_modalities:
+            row.append(r.modalities or "—")
+        if show_downloads:
+            row.append(f"{r.downloads:,}" if r.downloads else "—")
+        if show_released:
+            row.append(r.released or "—")
+        if show_repo:
+            row.append(r.repo_id)
+        if show_source:
+            row.append(r.source)
+        if show_path:
+            row.append(str(r.local_path) if r.local_path else "—")
+        style = "yellow" if r.source == "custom" else ""
+        table.add_row(*row, style=style)
+
+    return table
+
+
+# ── Picker helpers ───────────────────────────────────────────────────
+
 def _build_picker_rows(local_models: list, available_aliases: dict) -> list[_PickerRow]:
+    records = _build_model_records()
     rows: list[_PickerRow] = []
-    local_alias_set = {m["alias"] for m in local_models}
 
-    downloaded = [m for m in local_models if not m["alias"].startswith("embed:")]
-    if downloaded:
+    fav_records = [r for r in records if r.is_favorite]
+    dl_records = [r for r in records if r.is_downloaded and not r.is_favorite]
+    avail_records = [r for r in records if not r.is_downloaded and not r.is_favorite]
+
+    if fav_records:
+        rows.append(_PickerRow("", None, True, "★ Favorites"))
+        for r in fav_records:
+            rows.append(_PickerRow(f"★ {r.alias}", r.size_gb, r.is_downloaded, None))
+
+    if dl_records:
         rows.append(_PickerRow("", None, True, "Downloaded"))
-        for m in sorted(downloaded, key=lambda x: x["alias"]):
-            rows.append(_PickerRow(m["alias"], m["size_gb"], True, None))
+        for r in sorted(dl_records, key=lambda r: r.alias):
+            rows.append(_PickerRow(r.alias, r.size_gb, True, None))
 
-    available = [
-        (alias, repo)
-        for alias, repo in available_aliases.items()
-        if not alias.startswith("embed:") and alias not in local_alias_set
-    ]
-    if available:
+    if avail_records:
         rows.append(_PickerRow("", None, False, "Available"))
-        for alias, _ in sorted(available, key=lambda x: x[0]):
-            rows.append(_PickerRow(alias, None, False, None))
+        for r in sorted(avail_records, key=lambda r: r.alias):
+            rows.append(_PickerRow(r.alias, None, False, None))
 
     return rows
 
@@ -278,7 +503,8 @@ def _launch_tui(local_models: list, available_aliases: dict) -> tuple[str | None
                         picker_idx[0] = sel[0]
                 elif key in (curses.KEY_ENTER, 10, 13):
                     if sel and picker_idx[0] in sel:
-                        model[0] = visible[picker_idx[0]].alias
+                        picked = visible[picker_idx[0]].alias
+                        model[0] = picked.removeprefix("★ ")
                     screen[0] = "main"
                 elif key in (curses.KEY_LEFT, 27):
                     screen[0] = "main"
@@ -302,14 +528,10 @@ def _launch_tui(local_models: list, available_aliases: dict) -> tuple[str | None
 
 
 def _start_server_bg(model: str, host: str, port: int) -> subprocess.Popen:
-    ppmlx_exe = shutil.which("ppmlx") or shutil.which("pp-llm")
-    if ppmlx_exe:
-        cmd = [ppmlx_exe, "serve", "--host", host, "--port", str(port)]
-    else:
-        cmd = [sys.executable, "-m", "ppmlx.cli", "serve", "--host", host, "--port", str(port)]
+    cmd = [sys.executable, "-m", "ppmlx.cli", "serve", "--host", host, "--port", str(port)]
     if model:
         cmd += ["--model", model]
-    return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
 
 
 def _wait_server_ready(host: str, port: int, proc: subprocess.Popen, timeout: int = 30) -> bool:
@@ -329,13 +551,60 @@ def _wait_server_ready(host: str, port: int, proc: subprocess.Popen, timeout: in
     return False
 
 
+def _port_in_use(host: str, port: int) -> bool:
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind((host, port))
+            return False
+        except OSError:
+            return True
+
+
+def _flush_port(host: str, port: int) -> None:
+    """Kill any process listening on the given port and wait until it's free."""
+    import subprocess
+    result = subprocess.run(
+        ["lsof", "-ti", f"tcp:{port}"],
+        capture_output=True, text=True,
+    )
+    pids = result.stdout.strip()
+    if not pids:
+        return
+    for pid in pids.splitlines():
+        pid = pid.strip()
+        if pid:
+            try:
+                os.kill(int(pid), 9)
+                console.print(f"[yellow]Killed process {pid} on port {port}[/yellow]")
+            except (ProcessLookupError, ValueError):
+                pass
+    import time
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        if not _port_in_use(host, port):
+            return
+        time.sleep(0.3)
+    console.print(f"[red]Port {port} still in use after killing processes.[/red]")
+
+
 def _launch_coding_tool(action: str, model: str, host: str, port: int) -> None:
+    if _port_in_use(host, port):
+        console.print(f"[red]Port {port} is already in use.[/red]")
+        console.print(f"[dim]Try: ppmlx launch -a {action} -m {model} --port {port + 1}[/dim]")
+        raise typer.Exit(1)
+
     proc = _start_server_bg(model, host, port)
     console.print(f"[dim]Starting ppmlx server on {host}:{port}...[/dim]")
 
     if not _wait_server_ready(host, port, proc):
+        stderr_output = ""
+        if proc.stderr:
+            stderr_output = proc.stderr.read().decode(errors="replace").strip()
         proc.terminate()
         console.print("[red]Server failed to start within 30 seconds.[/red]")
+        if stderr_output:
+            console.print(f"[dim]{stderr_output[-500:]}[/dim]")
         raise typer.Exit(1)
 
     base_url = f"http://{host}:{port}/v1"
@@ -346,10 +615,15 @@ def _launch_coding_tool(action: str, model: str, host: str, port: int) -> None:
         env["ANTHROPIC_BASE_URL"] = base_url
         env["ANTHROPIC_API_KEY"] = "local"
     elif action == "codex":
-        cmd = ["codex"]
-        env["OPENAI_API_BASE"] = base_url
+        cmd = [
+            "codex", "--model", model,
+            "-c", 'model_provider="ppmlx"',
+            "-c", 'model_providers.ppmlx.name="ppmlx"',
+            "-c", f'model_providers.ppmlx.base_url="{base_url}"',
+            "-c", 'model_providers.ppmlx.env_key="OPENAI_API_KEY"',
+            "-c", 'model_providers.ppmlx.wire_api="responses"',
+        ]
         env["OPENAI_API_KEY"] = "local"
-        env["OPENAI_MODEL"] = model
     elif action == "opencode":
         cmd = ["opencode"]
         env["OPENAI_API_KEY"] = "local"
@@ -357,17 +631,37 @@ def _launch_coding_tool(action: str, model: str, host: str, port: int) -> None:
     elif action == "pi":
         models_file = Path.home() / ".pi" / "agent" / "models.json"
         models_file.parent.mkdir(parents=True, exist_ok=True)
-        existing: list = json.loads(models_file.read_text()) if models_file.exists() else []
-        entries = [e for e in existing if e.get("id") != "ppmlx"]
-        entries.append({
-            "id": "ppmlx",
-            "name": f"ppmlx ({model})",
-            "baseUrl": base_url,
-            "api": "openai-completions",
-            "apiKey": "local",
-        })
-        models_file.write_text(json.dumps(entries, indent=2))
-        cmd = ["pi", "--model", "ppmlx"]
+        existing = json.loads(models_file.read_text()) if models_file.exists() else {}
+        if isinstance(existing, dict) and "providers" in existing:
+            # New provider-based format
+            existing["providers"]["ppmlx"] = {
+                "api": "openai-completions",
+                "apiKey": "local",
+                "baseUrl": base_url,
+                "models": [{
+                    "_launch": True,
+                    "contextWindow": 262144,
+                    "id": model,
+                    "input": ["text"],
+                    "reasoning": True,
+                }],
+            }
+        else:
+            # Legacy flat list format
+            if isinstance(existing, list):
+                entries = [e for e in existing if isinstance(e, dict) and e.get("id") != "ppmlx"]
+            else:
+                entries = []
+            entries.append({
+                "id": "ppmlx",
+                "name": f"ppmlx ({model})",
+                "baseUrl": base_url,
+                "api": "openai-completions",
+                "apiKey": "local",
+            })
+            existing = entries
+        models_file.write_text(json.dumps(existing, indent=2))
+        cmd = ["pi", "--model", f"ppmlx/{model}"]
     else:
         proc.terminate()
         return
@@ -466,34 +760,28 @@ def _pick_model(local_only: bool = False, multi: bool = False) -> "str | list[st
     Raises typer.Exit if cancelled or nothing selected.
     """
     import questionary
-    from ppmlx.models import list_local_models, DEFAULT_ALIASES, all_aliases
 
-    local_models = list_local_models()
-    local_aliases = {m["alias"] for m in local_models}
-    local_repos   = {m["repo_id"] for m in local_models}
+    records = _build_model_records(
+        filter_downloaded=True if local_only else None,
+    )
+
+    if not records:
+        if local_only:
+            console.print("[yellow]No local models found. Run: ppmlx pull <model>[/yellow]")
+        else:
+            console.print("[yellow]No models available.[/yellow]")
+        raise typer.Exit(1)
 
     choices = []
-    if local_only:
-        if not local_models:
-            console.print("[yellow]No local models found. Run: ppmlx pull <model>[/yellow]")
-            raise typer.Exit(1)
-        for m in sorted(local_models, key=lambda x: x["alias"]):
-            label = f"{m['alias']:<24} {m['size_gb']:.1f} GB"
-            choices.append(questionary.Choice(label, value=m["alias"]))
-    else:
-        # Downloaded first, then available-but-not-local
-        for m in sorted(local_models, key=lambda x: x["alias"]):
-            label = f"{m['alias']:<24} {m['size_gb']:.1f} GB  ✓"
-            choices.append(questionary.Choice(label, value=m["alias"]))
-        for alias, repo in DEFAULT_ALIASES.items():
-            if alias.startswith("embed:") or alias in local_aliases:
-                continue
-            label = f"{alias:<24} {repo}"
-            choices.append(questionary.Choice(label, value=alias))
-
-    if not choices:
-        console.print("[yellow]No models available.[/yellow]")
-        raise typer.Exit(1)
+    for r in records:
+        prefix = "★ " if r.is_favorite else "  "
+        size = f"{r.size_gb:.1f} GB" if r.size_gb else ""
+        dl = "  ✓" if r.is_downloaded and not local_only else ""
+        if size:
+            label = f"{prefix}{r.alias:<36} {size}{dl}"
+        else:
+            label = f"{prefix}{r.alias:<36} {r.repo_id}"
+        choices.append(questionary.Choice(label, value=r.alias))
 
     if multi:
         selected = questionary.checkbox(
@@ -591,6 +879,9 @@ def serve(
         border_style="blue",
     ))
 
+    if _setproctitle_mod:
+        _setproctitle_mod.setproctitle(f"ppmlx: server ({effective_host}:{effective_port})")
+
     uvicorn.run(
         "ppmlx.server:app",
         host=effective_host,
@@ -602,21 +893,45 @@ def serve(
 
 @app.command()
 def launch(
+    action: Optional[str] = typer.Argument(None, help="Action: run, claude, codex, opencode, pi"),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="Model name or alias"),
     host: Optional[str] = typer.Option(None, help="Bind host"),
     port: Optional[int] = typer.Option(None, help="Bind port (default: 6767)"),
     no_cors: bool = typer.Option(False, "--no-cors", help="Disable CORS"),
+    flush: bool = typer.Option(False, "--flush", "-f", help="Kill any process using the port before starting"),
 ):
-    """Interactively select an action and model, then launch."""
+    """Select an action and model, then launch.
+
+    Without arguments, opens an interactive TUI picker.
+    With ACTION and MODEL, launches directly (non-interactive).
+    """
     from ppmlx.models import list_local_models, DEFAULT_ALIASES
     from ppmlx.config import load_config
+
+    valid_actions = {item.key for item in _LAUNCH_ITEMS}
 
     overrides = {k: v for k, v in [("host", host), ("port", port)] if v}
     cfg = load_config(cli_overrides=overrides)
     effective_host = host or cfg.server.host
     effective_port = port or cfg.server.port
 
-    local_models = list_local_models()
-    action, model = _launch_tui(local_models, DEFAULT_ALIASES)
+    if flush:
+        _flush_port(effective_host, effective_port)
+
+    if action and model:
+        if action not in valid_actions:
+            console.print(f"[red]Unknown action '{action}'. Valid: {', '.join(sorted(valid_actions))}[/red]")
+            raise typer.Exit(1)
+    elif action and not model:
+        if action in valid_actions:
+            console.print(f"[red]MODEL argument is required when ACTION is specified.[/red]")
+            raise typer.Exit(1)
+        # Single arg that's not a valid action — fall through to TUI
+        local_models = list_local_models()
+        action, model = _launch_tui(local_models, DEFAULT_ALIASES)
+    else:
+        local_models = list_local_models()
+        action, model = _launch_tui(local_models, DEFAULT_ALIASES)
 
     if not action:
         raise typer.Exit()
@@ -1145,16 +1460,16 @@ def pull(
     """Download a model from HuggingFace Hub (interactive multiselect when no model given)."""
     if model is None:
         import questionary
-        from ppmlx.models import DEFAULT_ALIASES, list_local_models
 
-        local_repos = {m["repo_id"] for m in list_local_models()}
+        records = _build_model_records(filter_downloaded=False)
         choices = []
-        for alias, repo in DEFAULT_ALIASES.items():
-            if alias.startswith("embed:"):
-                continue
-            tick = " ✓" if repo in local_repos else ""
-            label = f"{alias:<24} {repo}{tick}"
-            choices.append(questionary.Choice(label, value=alias))
+        for r in records:
+            label = f"{r.alias:<40} {r.repo_id}"
+            choices.append(questionary.Choice(label, value=r.alias))
+
+        if not choices:
+            console.print("[green]All available models are already downloaded.[/green]")
+            return
 
         selected = questionary.checkbox(
             "Select models to download  (Space=toggle, Enter=confirm, Ctrl-C=cancel):",
@@ -1174,28 +1489,25 @@ def pull(
 
 
 @app.command(name="list")
-def list_models():
-    """List locally downloaded models."""
-    from ppmlx.models import list_local_models
-
-    models = list_local_models()
-    if not models:
+def list_models(
+    all_models: bool = typer.Option(False, "--all", "-a", help="Show all models (local + registry)"),
+    show_path: bool = typer.Option(False, "--path", help="Show local file paths"),
+):
+    """List models. Shows downloaded models by default, --all includes registry."""
+    records = _build_model_records(
+        filter_downloaded=True if not all_models else None,
+    )
+    if not records:
         console.print("[dim]No models downloaded yet. Run: ppmlx pull <model>[/dim]")
         return
 
-    table = Table(title="Local Models", show_header=True)
-    table.add_column("Name", style="cyan")
-    table.add_column("Alias", style="green")
-    table.add_column("Size", justify="right")
-    table.add_column("Path", style="dim")
-
-    for m in models:
-        table.add_row(
-            m.get("name", ""),
-            m.get("alias", m.get("repo_id", "")),
-            f"{m.get('size_gb', 0):.2f} GB",
-            str(m.get("path", "")),
-        )
+    title = "Models" if all_models else "Local Models"
+    table = _model_table(
+        records,
+        title=title,
+        show_params=True,
+        show_path=show_path,
+    )
     console.print(table)
 
 
@@ -1238,36 +1550,118 @@ def rm(
 
 @app.command(name="alias")
 def add_alias(
-    name: str = typer.Argument(..., help="Alias name (e.g. my-model)"),
-    repo: str = typer.Argument(..., help="HuggingFace repo ID (e.g. org/model)"),
+    name: Optional[str] = typer.Argument(None, help="Alias name (e.g. my-model)"),
+    repo: Optional[str] = typer.Argument(None, help="HuggingFace repo ID (e.g. org/model)"),
 ):
-    """Add a custom model alias."""
+    """Add a custom model alias. Interactive when called without arguments."""
     from ppmlx.models import save_user_alias
+
+    if name is None or repo is None:
+        import questionary
+        from ppmlx.models import list_local_models
+        local_models = list_local_models()
+        if not local_models:
+            console.print("[yellow]No local models found. Run: ppmlx pull <model>[/yellow]")
+            raise typer.Exit(1)
+
+        choices = [
+            questionary.Choice(
+                f"{m['alias']:<24} {m['repo_id']}",
+                value=m["repo_id"],
+            )
+            for m in sorted(local_models, key=lambda x: x["alias"])
+        ]
+        if repo is None:
+            repo = questionary.select(
+                "Select a model to alias:", choices=choices,
+            ).ask()
+            if not repo:
+                raise typer.Exit()
+
+        if name is None:
+            name = questionary.text(
+                "Alias name:",
+                validate=lambda v: True if v.strip() else "Alias cannot be empty",
+            ).ask()
+            if not name:
+                raise typer.Exit()
+            name = name.strip()
+
     save_user_alias(name, repo)
     console.print(f"[green]Alias created: [bold]{name}[/bold] -> {repo}[/green]")
 
 
 @app.command()
 def aliases():
-    """Show all model aliases (built-in + custom)."""
-    from ppmlx.models import DEFAULT_ALIASES, load_user_aliases
+    """Show all model aliases (built-in + custom + registry)."""
+    records = _build_model_records(exclude_embed=False)
+    if not records:
+        console.print("[dim]No aliases configured.[/dim]")
+        return
+    table = _model_table(
+        records,
+        title="Model Aliases",
+        show_repo=True,
+        show_source=True,
+        show_size=False,
+    )
+    console.print(table)
+    try:
+        from ppmlx.registry import registry_meta
+        meta = registry_meta()
+        console.print(f"[dim]Registry: {meta['count']} models, updated {meta['updated']}[/dim]")
+    except Exception:
+        pass
 
-    user_aliases = load_user_aliases()
 
-    table = Table(title="Model Aliases", show_header=True)
-    table.add_column("Alias", style="cyan")
-    table.add_column("HuggingFace Repo", style="green")
-    table.add_column("Source", style="dim")
+@app.command()
+def fav(
+    model: Optional[str] = typer.Argument(None, help="Model alias to add to favorites"),
+):
+    """Add a model to your favorites list."""
+    if not model:
+        model = _pick_model()
+    from ppmlx.models import add_favorite
+    if add_favorite(model):
+        console.print(f"[green]★ Added [bold]{model}[/bold] to favorites[/green]")
+    else:
+        console.print(f"[yellow]{model} is already a favorite.[/yellow]")
 
-    for alias, repo in sorted(DEFAULT_ALIASES.items()):
-        source = "custom" if alias in user_aliases else "built-in"
-        style = "yellow" if alias in user_aliases else ""
-        table.add_row(alias, repo, source, style=style)
 
-    for alias, repo in sorted(user_aliases.items()):
-        if alias not in DEFAULT_ALIASES:
-            table.add_row(alias, repo, "custom", style="yellow")
+@app.command()
+def unfav(
+    model: Optional[str] = typer.Argument(None, help="Model alias to remove from favorites"),
+):
+    """Remove a model from your favorites list."""
+    if not model:
+        from ppmlx.models import load_favorites
+        favs = load_favorites()
+        if not favs:
+            console.print("[dim]No favorites set.[/dim]")
+            raise typer.Exit()
+        import questionary
+        choices = [questionary.Choice(f, value=f) for f in favs]
+        selected = questionary.select(
+            "Remove from favorites:", choices=choices,
+        ).ask()
+        if not selected:
+            raise typer.Exit()
+        model = selected
+    from ppmlx.models import remove_favorite
+    if remove_favorite(model):
+        console.print(f"[green]Removed [bold]{model}[/bold] from favorites[/green]")
+    else:
+        console.print(f"[yellow]{model} is not a favorite.[/yellow]")
 
+
+@app.command()
+def favs():
+    """Show your favorite models."""
+    records = _build_model_records(filter_favorites=True)
+    if not records:
+        console.print("[dim]No favorites yet. Add one with: ppmlx fav <model>[/dim]")
+        return
+    table = _model_table(records, title="★ Favorite Models", show_params=True)
     console.print(table)
 
 
@@ -1473,40 +1867,6 @@ def info(
     console.print(table)
 
 
-@app.command()
-def estimate(
-    model: Optional[str] = typer.Argument(None, help="Model alias or repo ID"),
-):
-    """Estimate RAM requirements before downloading."""
-    if not model:
-        model = _pick_model()
-    from ppmlx.models import resolve_alias, get_model_path, ModelNotFoundError
-    from ppmlx.memory import estimate_model_memory_gb, get_system_ram_gb, check_memory_warning
-
-    try:
-        repo_id = resolve_alias(model)
-    except ModelNotFoundError as e:
-        console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
-
-    local_path = get_model_path(repo_id)
-    ram_gb = get_system_ram_gb()
-
-    if local_path:
-        model_gb = estimate_model_memory_gb(local_path)
-        console.print(f"[cyan]Model:[/cyan] {model} ({repo_id})")
-        console.print(f"[cyan]Estimated RAM:[/cyan] {model_gb:.1f} GB")
-        console.print(f"[cyan]System RAM:[/cyan] {ram_gb:.0f} GB")
-        warning = check_memory_warning(local_path)
-        if warning:
-            console.print(f"[yellow]{warning}[/yellow]")
-        else:
-            console.print("[green]Should fit comfortably in RAM.[/green]")
-    else:
-        console.print(f"[yellow]Model not downloaded. Cannot estimate size accurately.[/yellow]")
-        console.print(f"[cyan]System RAM:[/cyan] {ram_gb:.0f} GB")
-        console.print(f"[dim]Pull the model first: ppmlx pull {model}[/dim]")
-
 
 @app.command(name="config")
 def config_cmd(
@@ -1563,6 +1923,58 @@ def config_cmd(
     except Exception as exc:
         console.print(f"[red]Failed to write config: {exc}[/red]")
         raise typer.Exit(1)
+
+
+@app.command()
+def registry(
+    search: Optional[str] = typer.Argument(None, help="Filter by name, alias, or lab"),
+    lab: Optional[str] = typer.Option(None, "--lab", "-l", help="Filter by lab/org"),
+    modality: Optional[str] = typer.Option(None, "--modality", "-m", help="Filter by modality (text, vision, audio, embeddings, tts)"),
+    model_type: Optional[str] = typer.Option(None, "--type", "-t", help="Filter by type (dense, sparse)"),
+    limit: int = typer.Option(50, "--limit", "-n", help="Max entries to show"),
+    sort: str = typer.Option("downloads", "--sort", "-s", help="Sort by: downloads, size, params, created, name"),
+):
+    """Browse the built-in model registry."""
+    from ppmlx.config import load_config
+
+    cfg = load_config()
+    if not cfg.registry.enabled:
+        console.print("[yellow]Registry is disabled. Enable it in ~/.ppmlx/config.toml:[/yellow]")
+        console.print("[dim][registry]\nenabled = true[/dim]")
+        return
+
+    records = _build_model_records(
+        filter_text=search,
+        filter_lab=lab,
+        filter_modality=modality,
+        filter_type=model_type,
+        sort_by=sort,
+        limit=limit,
+    )
+    if not records:
+        console.print("[dim]No models match the filter.[/dim]")
+        return
+
+    try:
+        from ppmlx.registry import registry_meta
+        meta = registry_meta()
+        title = f"Model Registry ({meta['count']} models, updated {meta['updated']})"
+    except Exception:
+        title = "Model Registry"
+
+    table = _model_table(
+        records,
+        title=title,
+        show_params=True,
+        show_type=True,
+        show_lab=True,
+        show_modalities=True,
+        show_downloads=True,
+        show_released=True,
+    )
+    console.print(table)
+    console.print(f"\n[dim]Pull a model:  ppmlx pull <alias>[/dim]")
+    console.print(f"[dim]Disable:       set [registry] enabled = false in ~/.ppmlx/config.toml[/dim]")
 
 
 if __name__ == "__main__":

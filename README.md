@@ -10,20 +10,9 @@
 
 ## Install
 
-### Homebrew (recommended)
+> **Requires:** macOS on Apple Silicon (M1/M2/M3/M4), Python 3.11+
 
-```bash
-brew tap <org>/ppmlx
-brew install ppmlx
-```
-
-### curl | sh (one-liner)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/<org>/ppmlx/main/scripts/install.sh | sh
-```
-
-### uv tool install
+### uv (recommended)
 
 ```bash
 uv tool install ppmlx
@@ -34,6 +23,24 @@ uv tool install ppmlx
 ```bash
 pipx install ppmlx
 ```
+
+### curl | sh (one-liner)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/PingCompany/ppmlx/main/scripts/install.sh | sh
+```
+
+### From source
+
+```bash
+git clone https://github.com/PingCompany/ppmlx
+cd ppmlx
+uv tool install .
+```
+
+### Homebrew
+
+Homebrew tap coming soon. For now, use `uv tool install ppmlx`.
 
 ---
 
@@ -277,13 +284,6 @@ log_level = "info"                  # Server log level
 
 ## Uninstall
 
-### Homebrew
-
-```bash
-brew uninstall ppmlx
-brew untap <org>/ppmlx
-```
-
 ### uv
 
 ```bash
@@ -316,7 +316,7 @@ rm -rf ~/.ppmlx
 ### Development Setup
 
 ```bash
-git clone https://github.com/<org>/ppmlx
+git clone https://github.com/PingCompany/ppmlx
 cd ppmlx
 uv sync --python 3.11
 uv run ppmlx --version

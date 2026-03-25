@@ -188,3 +188,104 @@ def test_cors_headers_present(client):
     # CORS middleware sets Access-Control-Allow-Origin on actual requests too
     response2 = client.get("/health", headers={"Origin": "http://localhost:3000"})
     assert "access-control-allow-origin" in response2.headers
+
+
+# ---------------------------------------------------------------------------
+# Tool-call parsing
+# ---------------------------------------------------------------------------
+def test_parse_tool_calls_single():
+    from ppmlx.server import _parse_tool_calls
+    text = '<tool_call>\n{"name": "exec_command", "arguments": {"cmd": "ls"}}\n</tool_call>'
+    remaining, calls = _parse_tool_calls(text)
+    assert remaining == ""
+    assert len(calls) == 1
+    assert calls[0]["name"] == "exec_command"
+    assert '"cmd"' in calls[0]["arguments"]
+
+
+def test_parse_tool_calls_with_text():
+    from ppmlx.server import _parse_tool_calls
+    text = 'Let me check.\n<tool_call>\n{"name": "exec_command", "arguments": {"cmd": "ls"}}\n</tool_call>\nDone.'
+    remaining, calls = _parse_tool_calls(text)
+    assert "Let me check" in remaining
+    assert "Done" in remaining
+    assert len(calls) == 1
+
+
+def test_parse_tool_calls_multiple():
+    from ppmlx.server import _parse_tool_calls
+    text = (
+        '<tool_call>\n{"name": "exec_command", "arguments": {"cmd": "ls"}}\n</tool_call>'
+        '<tool_call>\n{"name": "apply_patch", "arguments": {"patch": "..."}}\n</tool_call>'
+    )
+    remaining, calls = _parse_tool_calls(text)
+    assert len(calls) == 2
+    assert calls[0]["name"] == "exec_command"
+    assert calls[1]["name"] == "apply_patch"
+
+
+def test_parse_tool_calls_no_calls():
+    from ppmlx.server import _parse_tool_calls
+    text = "Just a regular response with no tool calls."
+    remaining, calls = _parse_tool_calls(text)
+    assert remaining == text
+    assert calls == []
+
+
+def test_parse_tool_calls_xml_format():
+    """Qwen3.5 uses XML-like format inside <tool_call> blocks."""
+    from ppmlx.server import _parse_tool_calls
+    text = (
+        '<tool_call>\n'
+        '<function=exec_command>\n'
+        '<parameter=cmd>\n'
+        'ls -la\n'
+        '</parameter>\n'
+        '</function>\n'
+        '</tool_call>'
+    )
+    remaining, calls = _parse_tool_calls(text)
+    assert remaining == ""
+    assert len(calls) == 1
+    assert calls[0]["name"] == "exec_command"
+    import json
+    args = json.loads(calls[0]["arguments"])
+    assert args["cmd"] == "ls -la"
+
+
+def test_parse_tool_calls_xml_with_text():
+    from ppmlx.server import _parse_tool_calls
+    text = (
+        'Let me check.\n\n'
+        '<tool_call>\n'
+        '<function=exec_command>\n'
+        '<parameter=cmd>\npwd\n</parameter>\n'
+        '</function>\n'
+        '</tool_call>'
+    )
+    remaining, calls = _parse_tool_calls(text)
+    assert "Let me check" in remaining
+    assert len(calls) == 1
+    assert calls[0]["name"] == "exec_command"
+
+
+def test_responses_with_tool_calls(client):
+    """Responses API should parse <tool_call> blocks into function_call output items."""
+    tool_response = '<tool_call>\n{"name": "exec_command", "arguments": {"cmd": "ls -la"}}\n</tool_call>'
+    mock_engine.generate.return_value = (tool_response, None, 10, 20)
+    sys.modules["ppmlx.engine"].get_engine = MagicMock(return_value=mock_engine)
+
+    response = client.post("/v1/responses", json={
+        "model": "test-model",
+        "input": "list files",
+        "stream": False,
+        "tools": [{"type": "function", "name": "exec_command", "parameters": {}}],
+    })
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "completed"
+    # Should contain a function_call output item
+    fc_items = [o for o in data["output"] if o["type"] == "function_call"]
+    assert len(fc_items) == 1
+    assert fc_items[0]["name"] == "exec_command"
+    assert '"cmd"' in fc_items[0]["arguments"]

@@ -2,7 +2,7 @@ class PpLlm < Formula
   include Language::Python::Virtualenv
 
   desc "CLI for running LLMs on Apple Silicon via MLX"
-  homepage "https://github.com/<org>/ppmlx"
+  homepage "https://github.com/PingCompany/ppmlx"
   url "https://files.pythonhosted.org/packages/source/p/ppmlx/ppmlx-0.1.0.tar.gz"
   sha256 "PLACEHOLDER_SHA256"
   license "MIT"

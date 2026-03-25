@@ -5,6 +5,21 @@ description = "CLI for running LLMs on Apple Silicon via MLX"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11,<3.13"
+authors = [
+    { name = "Rafał Wyderka", email = "rafal@ppmlx.dev" },
+]
+keywords = ["mlx", "llm", "apple-silicon", "inference", "ollama", "local-ai", "cli"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "mlx-lm>=0.22 ; sys_platform == 'darwin'",
     "mlx-vlm>=0.1.18 ; sys_platform == 'darwin'",
@@ -20,7 +35,14 @@ dependencies = [
     "questionary>=2.0",
     "prompt-toolkit>=3.0",
     "tomli-w>=1.0",
+    "setproctitle>=1.3",
 ]
+
+[project.urls]
+Homepage = "https://ppmlx.dev"
+Repository = "https://github.com/PingCompany/ppmlx"
+Issues = "https://github.com/PingCompany/ppmlx/issues"
+Documentation = "https://github.com/PingCompany/ppmlx#readme"
 
 [project.scripts]
 ppmlx = "ppmlx.cli:app"

@@ -33,7 +33,18 @@ class VisionEngine:
         from mlx_vlm import load as vlm_load
         with self._lock:
             if repo_id not in self._models:
-                model, processor = vlm_load(path)
+                try:
+                    model, processor = vlm_load(path)
+                except ImportError as e:
+                    msg = str(e)
+                    if "torchvision" in msg or "torch" in msg:
+                        raise RuntimeError(
+                            f"Vision processor for '{repo_id}' requires PyTorch, but this may be "
+                            f"an unnecessary dependency — mlx-vlm should handle vision natively on Apple Silicon.\n"
+                            f"Workaround: pip install torch torchvision\n"
+                            f"If this is a text-only model, send requests without images to use the MLX text engine instead."
+                        ) from e
+                    raise
                 self._models[repo_id] = (model, processor)
 
     def _extract_images(self, messages: list[dict]) -> list[str | bytes]:

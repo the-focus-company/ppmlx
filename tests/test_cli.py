@@ -6,7 +6,8 @@ from typer.testing import CliRunner
 # Mock all ppmlx modules before importing cli
 for mod_name in ["ppmlx.models", "ppmlx.engine", "ppmlx.db",
                   "ppmlx.config", "ppmlx.memory", "ppmlx.modelfile",
-                  "ppmlx.quantize", "ppmlx.engine_embed", "ppmlx.engine_vlm"]:
+                  "ppmlx.quantize", "ppmlx.engine_embed", "ppmlx.engine_vlm",
+                  "ppmlx.registry"]:
     if mod_name not in sys.modules:
         sys.modules[mod_name] = MagicMock()
 
@@ -29,15 +30,36 @@ def test_help():
     assert "ppmlx" in result.output
 
 
+def _setup_model_mocks(
+    defaults=None,
+    user_aliases=None,
+    local_models=None,
+    favorites=None,
+):
+    """Configure ppmlx.models mocks for commands using _build_model_records."""
+    if defaults is None:
+        defaults = {}
+    if user_aliases is None:
+        user_aliases = {}
+    if local_models is None:
+        local_models = []
+    if favorites is None:
+        favorites = []
+    merged = {**defaults, **user_aliases}
+    sys.modules["ppmlx.models"].DEFAULT_ALIASES = defaults
+    sys.modules["ppmlx.models"].load_user_aliases = MagicMock(return_value=user_aliases)
+    sys.modules["ppmlx.models"].all_aliases = MagicMock(return_value=merged)
+    sys.modules["ppmlx.models"].list_local_models = MagicMock(return_value=local_models)
+    sys.modules["ppmlx.models"].load_favorites = MagicMock(return_value=favorites)
+    sys.modules["ppmlx.registry"].registry_entries = MagicMock(return_value={})
+
+
 def test_aliases_command():
     """aliases command renders a table with alias/repo columns."""
-    mock_defaults = {
+    _setup_model_mocks(defaults={
         "llama3": "mlx-community/Meta-Llama-3-8B-Instruct-4bit",
         "mistral": "mlx-community/Mistral-7B-Instruct-v0.3-4bit",
-    }
-    mock_user = {}
-    sys.modules["ppmlx.models"].DEFAULT_ALIASES = mock_defaults
-    sys.modules["ppmlx.models"].load_user_aliases = MagicMock(return_value=mock_user)
+    })
 
     result = runner.invoke(app, ["aliases"])
     assert result.exit_code == 0
@@ -48,7 +70,7 @@ def test_aliases_command():
 
 def test_list_command_empty():
     """list command shows 'No models' message when no models are downloaded."""
-    sys.modules["ppmlx.models"].list_local_models = MagicMock(return_value=[])
+    _setup_model_mocks()
 
     result = runner.invoke(app, ["list"])
     assert result.exit_code == 0
@@ -66,11 +88,14 @@ def test_list_command_with_model():
             "path": "/Users/test/.ppmlx/models/llama3",
         }
     ]
-    sys.modules["ppmlx.models"].list_local_models = MagicMock(return_value=mock_models)
+    _setup_model_mocks(
+        defaults={"llama3": "mlx-community/Meta-Llama-3-8B-Instruct-4bit"},
+        local_models=mock_models,
+    )
 
     result = runner.invoke(app, ["list"])
     assert result.exit_code == 0
-    assert "Meta-Llama-3-8B-Instruct-4bit" in result.output or "llama3" in result.output
+    assert "llama3" in result.output
 
 
 def test_pull_command():

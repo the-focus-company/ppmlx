@@ -1,0 +1,1687 @@
+{
+  "version": 1,
+  "updated": "2026-03-24",
+  "source": "https://huggingface.co/mlx-community",
+  "models": {
+    "kimi-k2.5": {
+      "repo_id": "mlx-community/Kimi-K2.5",
+      "params_b": 1000,
+      "size_gb": 657.6,
+      "type": "sparse",
+      "lab": "Moonshot AI",
+      "modalities": "text",
+      "downloads": 2011837,
+      "created": "2026-01-27"
+    },
+    "parakeet:0.6b-v3": {
+      "repo_id": "mlx-community/parakeet-tdt-0.6b-v3",
+      "params_b": 0.6,
+      "size_gb": 2.5,
+      "type": "dense",
+      "lab": "NVIDIA",
+      "modalities": "audio, speech",
+      "downloads": 655802,
+      "created": "2025-08-16"
+    },
+    "gpt-oss:20b-mxfp4q8": {
+      "repo_id": "mlx-community/gpt-oss-20b-MXFP4-Q8",
+      "params_b": 20.0,
+      "size_gb": 12.1,
+      "type": "dense",
+      "lab": "OpenAI",
+      "modalities": "text",
+      "downloads": 538398,
+      "created": "2025-08-29"
+    },
+    "devstral:24b": {
+      "repo_id": "mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit",
+      "params_b": 24.0,
+      "size_gb": 14.1,
+      "type": "dense",
+      "lab": "Mistral AI",
+      "modalities": "text",
+      "downloads": 183250,
+      "created": "2025-12-09"
+    },
+    "qwen3.5:9b": {
+      "repo_id": "mlx-community/Qwen3.5-9B-MLX-4bit",
+      "params_b": 9.0,
+      "size_gb": 6.0,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 103194,
+      "created": "2026-03-02"
+    },
+    "qwen3.5:4b": {
+      "repo_id": "mlx-community/Qwen3.5-4B-4bit",
+      "params_b": 4.0,
+      "size_gb": 3.1,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 80579,
+      "created": "2026-03-02"
+    },
+    "qwen3.5:2b-6bit": {
+      "repo_id": "mlx-community/Qwen3.5-2B-6bit",
+      "params_b": 2.0,
+      "size_gb": 2.2,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 56090,
+      "created": "2026-03-02"
+    },
+    "qwen3:4b": {
+      "repo_id": "mlx-community/Qwen3-4B-Instruct-2507-4bit",
+      "params_b": 4.0,
+      "size_gb": 2.3,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 51510,
+      "created": "2025-08-06"
+    },
+    "qwen3.5:27b": {
+      "repo_id": "mlx-community/Qwen3.5-27B-4bit",
+      "params_b": 27.0,
+      "size_gb": 16.1,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 49469,
+      "created": "2026-02-24"
+    },
+    "qwen3.5:35b-a3b": {
+      "repo_id": "mlx-community/Qwen3.5-35B-A3B-4bit",
+      "params_b": 35.0,
+      "size_gb": 20.4,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 47416,
+      "created": "2026-02-24"
+    },
+    "gpt-oss:120b-mxfp4q8": {
+      "repo_id": "mlx-community/gpt-oss-120b-MXFP4-Q8",
+      "params_b": 120.0,
+      "size_gb": 63.4,
+      "type": "dense",
+      "lab": "OpenAI",
+      "modalities": "text",
+      "downloads": 31190,
+      "created": "2025-08-29"
+    },
+    "qwen3.5:4b-mlx": {
+      "repo_id": "mlx-community/Qwen3.5-4B-MLX-4bit",
+      "params_b": 4.0,
+      "size_gb": 3.1,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 30452,
+      "created": "2026-03-02"
+    },
+    "glm4.7-flash-8bit": {
+      "repo_id": "mlx-community/GLM-4.7-Flash-8bit",
+      "params_b": 58,
+      "size_gb": 63.3,
+      "type": "sparse",
+      "lab": "Zhipu AI",
+      "modalities": "text",
+      "downloads": 29214,
+      "created": "2026-01-19"
+    },
+    "qwen3.5:0.8b-8bit": {
+      "repo_id": "mlx-community/Qwen3.5-0.8B-8bit",
+      "params_b": 0.8,
+      "size_gb": 1.0,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 28809,
+      "created": "2026-03-02"
+    },
+    "glm4.7-flash": {
+      "repo_id": "mlx-community/GLM-4.7-Flash-4bit",
+      "params_b": 58,
+      "size_gb": 33.7,
+      "type": "sparse",
+      "lab": "Zhipu AI",
+      "modalities": "text",
+      "downloads": 28474,
+      "created": "2026-01-19"
+    },
+    "glm4.7": {
+      "repo_id": "mlx-community/GLM-4.7-4bit",
+      "params_b": 352.8,
+      "size_gb": 198.6,
+      "type": "sparse",
+      "lab": "Zhipu AI",
+      "modalities": "text",
+      "downloads": 27561,
+      "created": "2025-12-22"
+    },
+    "qwen3:235b-a22b": {
+      "repo_id": "mlx-community/Qwen3-235B-A22B-Instruct-2507-4bit",
+      "params_b": 235.0,
+      "size_gb": 132.3,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 26813,
+      "created": "2025-07-22"
+    },
+    "qwen3.5:35b-a3b-8bit": {
+      "repo_id": "mlx-community/Qwen3.5-35B-A3B-8bit",
+      "params_b": 35.0,
+      "size_gb": 37.7,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 26471,
+      "created": "2026-02-24"
+    },
+    "kimi-k2-think": {
+      "repo_id": "mlx-community/Kimi-K2-Thinking",
+      "params_b": 1026.4,
+      "size_gb": 657.6,
+      "type": "sparse",
+      "lab": "Moonshot AI",
+      "modalities": "text",
+      "downloads": 26255,
+      "created": "2025-11-07"
+    },
+    "qwen3-coder:480b-a35b-8bit": {
+      "repo_id": "mlx-community/Qwen3-Coder-480B-A35B-Instruct-8bit",
+      "params_b": 480.0,
+      "size_gb": 540.2,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 25924,
+      "created": "2025-12-08"
+    },
+    "glm4.5-air-8bit": {
+      "repo_id": "mlx-community/GLM-4.5-Air-8bit",
+      "params_b": 106.9,
+      "size_gb": 113.6,
+      "type": "sparse",
+      "lab": "Zhipu AI",
+      "modalities": "text",
+      "downloads": 25514,
+      "created": "2025-07-28"
+    },
+    "qwen3-next:80b-a3b-think": {
+      "repo_id": "mlx-community/Qwen3-Next-80B-A3B-Thinking-4bit",
+      "params_b": 80.0,
+      "size_gb": 44.9,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 25125,
+      "created": "2025-09-13"
+    },
+    "qwen3-next:80b-a3b": {
+      "repo_id": "mlx-community/Qwen3-Next-80B-A3B-Instruct-4bit",
+      "params_b": 80.0,
+      "size_gb": 44.9,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 24984,
+      "created": "2025-09-12"
+    },
+    "kimi-k2": {
+      "repo_id": "mlx-community/Kimi-K2-Instruct-4bit",
+      "params_b": 1026.4,
+      "size_gb": 577.6,
+      "type": "sparse",
+      "lab": "Moonshot AI",
+      "modalities": "text",
+      "downloads": 24693,
+      "created": "2025-07-11"
+    },
+    "glm4.7-flash-5bit": {
+      "repo_id": "mlx-community/GLM-4.7-Flash-5bit",
+      "params_b": 58,
+      "size_gb": 41.2,
+      "type": "sparse",
+      "lab": "Zhipu AI",
+      "modalities": "text",
+      "downloads": 24495,
+      "created": "2026-01-19"
+    },
+    "deepseek-v3.1": {
+      "repo_id": "mlx-community/DeepSeek-V3.1-4bit",
+      "params_b": 685,
+      "size_gb": 377.6,
+      "type": "sparse",
+      "lab": "DeepSeek",
+      "modalities": "text",
+      "downloads": 24340,
+      "created": "2025-08-21"
+    },
+    "qwen3-coder:480b-a35b": {
+      "repo_id": "mlx-community/Qwen3-Coder-480B-A35B-Instruct-4bit",
+      "params_b": 480.0,
+      "size_gb": 270.1,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 24066,
+      "created": "2025-07-22"
+    },
+    "glm4.7-flash-6bit": {
+      "repo_id": "mlx-community/GLM-4.7-Flash-6bit",
+      "params_b": 58,
+      "size_gb": 48.7,
+      "type": "sparse",
+      "lab": "Zhipu AI",
+      "modalities": "text",
+      "downloads": 23959,
+      "created": "2026-01-19"
+    },
+    "qwen3:235b-a22b-8bit": {
+      "repo_id": "mlx-community/Qwen3-235B-A22B-Instruct-2507-8bit",
+      "params_b": 235.0,
+      "size_gb": 249.8,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 23828,
+      "created": "2025-07-22"
+    },
+    "minimax-m2.1-3bit": {
+      "repo_id": "mlx-community/MiniMax-M2.1-3bit",
+      "params_b": 228.7,
+      "size_gb": 100.1,
+      "type": "dense",
+      "lab": "MiniMax",
+      "modalities": "text",
+      "downloads": 23675,
+      "created": "2025-12-26"
+    },
+    "qwen3-next:80b-a3b-8bit": {
+      "repo_id": "mlx-community/Qwen3-Next-80B-A3B-Instruct-8bit",
+      "params_b": 80.0,
+      "size_gb": 84.7,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 23673,
+      "created": "2025-09-13"
+    },
+    "qwen3-next:80b-a3b-think-8bit": {
+      "repo_id": "mlx-community/Qwen3-Next-80B-A3B-Thinking-8bit",
+      "params_b": 80.0,
+      "size_gb": 84.7,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 23653,
+      "created": "2025-09-13"
+    },
+    "deepseek-v3.1-8bit": {
+      "repo_id": "mlx-community/DeepSeek-V3.1-8bit",
+      "params_b": 671.0,
+      "size_gb": 2055.1,
+      "type": "sparse",
+      "lab": "DeepSeek",
+      "modalities": "text",
+      "downloads": 23506,
+      "created": "2025-08-21"
+    },
+    "minimax-m2.1-8bit": {
+      "repo_id": "mlx-community/MiniMax-M2.1-8bit",
+      "params_b": 228.7,
+      "size_gb": 243.0,
+      "type": "dense",
+      "lab": "MiniMax",
+      "modalities": "text",
+      "downloads": 23338,
+      "created": "2025-12-26"
+    },
+    "qwen3.5:9b-v2": {
+      "repo_id": "mlx-community/Qwen3.5-9B-4bit",
+      "params_b": 9.0,
+      "size_gb": 6.0,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 23180,
+      "created": "2026-03-02"
+    },
+    "glm4.7-8bit": {
+      "repo_id": "mlx-community/GLM-4.7-8bit-gs32",
+      "params_b": 352.8,
+      "size_gb": 397.0,
+      "type": "sparse",
+      "lab": "Zhipu AI",
+      "modalities": "text",
+      "downloads": 23161,
+      "created": "2025-12-23"
+    },
+    "glm4.5-air-bf16": {
+      "repo_id": "mlx-community/GLM-4.5-Air-bf16",
+      "params_b": 106.9,
+      "size_gb": 213.7,
+      "type": "sparse",
+      "lab": "Zhipu AI",
+      "modalities": "text",
+      "downloads": 22888,
+      "created": "2025-10-07"
+    },
+    "glm4.7-6bit": {
+      "repo_id": "mlx-community/GLM-4.7-6bit",
+      "params_b": 352.8,
+      "size_gb": 286.8,
+      "type": "sparse",
+      "lab": "Zhipu AI",
+      "modalities": "text",
+      "downloads": 22773,
+      "created": "2025-12-22"
+    },
+    "qwen3.5:27b-claude-distill": {
+      "repo_id": "mlx-community/Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit",
+      "params_b": 27.0,
+      "size_gb": 15.2,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 22758,
+      "created": "2026-03-04"
+    },
+    "ministral:3b": {
+      "repo_id": "mlx-community/Ministral-3-3B-Instruct-2512-4bit",
+      "params_b": 3.0,
+      "size_gb": 4.7,
+      "type": "dense",
+      "lab": "Mistral AI",
+      "modalities": "text",
+      "downloads": 20863,
+      "created": "2025-12-03"
+    },
+    "qwen3.5:122b-a10b": {
+      "repo_id": "mlx-community/Qwen3.5-122B-A10B-4bit",
+      "params_b": 122.0,
+      "size_gb": 69.6,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 17129,
+      "created": "2026-02-24"
+    },
+    "qwen3.5:0.8b": {
+      "repo_id": "mlx-community/Qwen3.5-0.8B-MLX-4bit",
+      "params_b": 0.8,
+      "size_gb": 0.6,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 14728,
+      "created": "2026-03-02"
+    },
+    "qwen3.5:9b-8bit": {
+      "repo_id": "mlx-community/Qwen3.5-9B-8bit",
+      "params_b": 9.0,
+      "size_gb": 10.4,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 12506,
+      "created": "2026-03-02"
+    },
+    "qwen3.5:2b": {
+      "repo_id": "mlx-community/Qwen3.5-2B-4bit",
+      "params_b": 2.0,
+      "size_gb": 1.7,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 10724,
+      "created": "2026-03-02"
+    },
+    "lfm2.5:1.2b": {
+      "repo_id": "mlx-community/LFM2.5-1.2B-Instruct-4bit",
+      "params_b": 1.2,
+      "size_gb": 0.7,
+      "type": "dense",
+      "lab": "Liquid AI",
+      "modalities": "text",
+      "downloads": 10115,
+      "created": "2026-01-06"
+    },
+    "qwen3-vl:4b": {
+      "repo_id": "mlx-community/Qwen3-VL-4B-Instruct-4bit",
+      "params_b": 4.0,
+      "size_gb": 3.1,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 9873,
+      "created": "2025-10-15"
+    },
+    "nemotron-nano:30b-a3b": {
+      "repo_id": "mlx-community/NVIDIA-Nemotron-3-Nano-30B-A3B-4bit",
+      "params_b": 30.0,
+      "size_gb": 17.8,
+      "type": "sparse",
+      "lab": "NVIDIA",
+      "modalities": "text",
+      "downloads": 9337,
+      "created": "2025-12-15"
+    },
+    "qwen3.5:27b-heretic-8bit": {
+      "repo_id": "mlx-community/Qwen3.5-27B-heretic-8bit",
+      "params_b": 27.0,
+      "size_gb": 29.5,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 8896,
+      "created": "2026-02-26"
+    },
+    "qwen3-tts:1.7b-bf16": {
+      "repo_id": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16",
+      "params_b": 1.7,
+      "size_gb": 4.5,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text-to-speech",
+      "downloads": 8421,
+      "created": "2026-01-22"
+    },
+    "qwen3.5:397b-a17b": {
+      "repo_id": "mlx-community/Qwen3.5-397B-A17B-4bit",
+      "params_b": 397.0,
+      "size_gb": 594.6,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 8366,
+      "created": "2026-02-16"
+    },
+    "qwen3.5:27b-8bit": {
+      "repo_id": "mlx-community/Qwen3.5-27B-8bit",
+      "params_b": 27.0,
+      "size_gb": 29.5,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 8011,
+      "created": "2026-02-24"
+    },
+    "lfm2.5-vl:1.6b": {
+      "repo_id": "mlx-community/LFM2.5-VL-1.6B-4bit",
+      "params_b": 1.6,
+      "size_gb": 1.5,
+      "type": "dense",
+      "lab": "Liquid AI",
+      "modalities": "text, vision",
+      "downloads": 7129,
+      "created": "2026-01-06"
+    },
+    "qwen3.5:9b-optiq": {
+      "repo_id": "mlx-community/Qwen3.5-9B-OptiQ-4bit",
+      "params_b": 9.0,
+      "size_gb": 6.1,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 6657,
+      "created": "2026-03-05"
+    },
+    "qwen3-coder-next": {
+      "repo_id": "mlx-community/Qwen3-Coder-Next-4bit",
+      "params_b": 80,
+      "size_gb": 44.9,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 6462,
+      "created": "2026-02-03"
+    },
+    "qwen3.5:9b-mlx-8bit": {
+      "repo_id": "mlx-community/Qwen3.5-9B-MLX-8bit",
+      "params_b": 9.0,
+      "size_gb": 10.4,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 6447,
+      "created": "2026-03-02"
+    },
+    "qwen3.5:2b-mlx-8bit": {
+      "repo_id": "mlx-community/Qwen3.5-2B-MLX-8bit",
+      "params_b": 2.0,
+      "size_gb": 2.7,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 6270,
+      "created": "2026-03-02"
+    },
+    "qwen3.5:0.8b-mlx-8bit": {
+      "repo_id": "mlx-community/Qwen3.5-0.8B-MLX-8bit",
+      "params_b": 0.8,
+      "size_gb": 1.0,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 6152,
+      "created": "2026-03-02"
+    },
+    "qwen3.5:0.8b-v2": {
+      "repo_id": "mlx-community/Qwen3.5-0.8B-4bit",
+      "params_b": 0.8,
+      "size_gb": 0.6,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 5925,
+      "created": "2026-03-02"
+    },
+    "qwen3.5:27b-claude-distill-6bit": {
+      "repo_id": "mlx-community/Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-6bit",
+      "params_b": 27.0,
+      "size_gb": 21.9,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 5917,
+      "created": "2026-03-05"
+    },
+    "translategemma:4b": {
+      "repo_id": "mlx-community/translategemma-4b-it-4bit",
+      "params_b": 4.0,
+      "size_gb": 2.2,
+      "type": "dense",
+      "lab": "Google",
+      "modalities": "text",
+      "downloads": 5209,
+      "created": "2026-01-15"
+    },
+    "minimax-m2.1": {
+      "repo_id": "mlx-community/MiniMax-M2.1-4bit",
+      "params_b": 228.7,
+      "size_gb": 128.7,
+      "type": "dense",
+      "lab": "MiniMax",
+      "modalities": "text",
+      "downloads": 5205,
+      "created": "2025-12-26"
+    },
+    "qwen3.5:27b-6bit": {
+      "repo_id": "mlx-community/Qwen3.5-27B-6bit",
+      "params_b": 27.0,
+      "size_gb": 22.8,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 5123,
+      "created": "2026-02-24"
+    },
+    "qwen3.5:4b-optiq": {
+      "repo_id": "mlx-community/Qwen3.5-4B-OptiQ-4bit",
+      "params_b": 4.0,
+      "size_gb": 3.0,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 5106,
+      "created": "2026-03-04"
+    },
+    "qwen3-coder-next-8bit": {
+      "repo_id": "mlx-community/Qwen3-Coder-Next-8bit",
+      "params_b": 79.7,
+      "size_gb": 84.7,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 5074,
+      "created": "2026-02-03"
+    },
+    "lfm2:2.6b": {
+      "repo_id": "mlx-community/LFM2-2.6B-4bit",
+      "params_b": 2.6,
+      "size_gb": 1.4,
+      "type": "dense",
+      "lab": "Liquid AI",
+      "modalities": "text",
+      "downloads": 4814,
+      "created": "2025-09-23"
+    },
+    "qwen3-vl:2b": {
+      "repo_id": "mlx-community/Qwen3-VL-2B-Instruct-4bit",
+      "params_b": 2.0,
+      "size_gb": 1.8,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 4803,
+      "created": "2025-10-21"
+    },
+    "glm5-mxfp4q8": {
+      "repo_id": "mlx-community/GLM-5-MXFP4-Q8",
+      "params_b": 743.9,
+      "size_gb": 405.5,
+      "type": "sparse",
+      "lab": "Zhipu AI",
+      "modalities": "text",
+      "downloads": 4725,
+      "created": "2026-02-12"
+    },
+    "smollm3:3b": {
+      "repo_id": "mlx-community/SmolLM3-3B-4bit",
+      "params_b": 3.0,
+      "size_gb": 1.7,
+      "type": "dense",
+      "lab": "HuggingFace",
+      "modalities": "text",
+      "downloads": 4662,
+      "created": "2025-07-08"
+    },
+    "ministral:8b": {
+      "repo_id": "mlx-community/Ministral-3-8B-Instruct-2512-4bit",
+      "params_b": 8.0,
+      "size_gb": 10.4,
+      "type": "dense",
+      "lab": "Mistral AI",
+      "modalities": "text",
+      "downloads": 4580,
+      "created": "2025-12-03"
+    },
+    "gpt-oss:20b-mxfp4q4": {
+      "repo_id": "mlx-community/gpt-oss-20b-MXFP4-Q4",
+      "params_b": 20.0,
+      "size_gb": 11.2,
+      "type": "dense",
+      "lab": "OpenAI",
+      "modalities": "text",
+      "downloads": 4531,
+      "created": "2025-08-29"
+    },
+    "minimax-m2.5-8bit": {
+      "repo_id": "mlx-community/MiniMax-M2.5-8bit",
+      "params_b": 228.7,
+      "size_gb": 243.0,
+      "type": "dense",
+      "lab": "MiniMax",
+      "modalities": "text",
+      "downloads": 4522,
+      "created": "2026-02-13"
+    },
+    "qwen3-tts:1.7b-custom-8bit": {
+      "repo_id": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit",
+      "params_b": 1.7,
+      "size_gb": 5.1,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text-to-speech",
+      "downloads": 4495,
+      "created": "2026-01-22"
+    },
+    "qwen3.5:2b-mlx": {
+      "repo_id": "mlx-community/Qwen3.5-2B-MLX-4bit",
+      "params_b": 2.0,
+      "size_gb": 1.7,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 4490,
+      "created": "2026-03-02"
+    },
+    "qwen3.5:122b-a10b-8bit": {
+      "repo_id": "mlx-community/Qwen3.5-122B-A10B-8bit",
+      "params_b": 122.0,
+      "size_gb": 130.7,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 4326,
+      "created": "2026-02-24"
+    },
+    "embed:gemma-300m": {
+      "repo_id": "mlx-community/embeddinggemma-300m-4bit",
+      "params_b": 0.0,
+      "size_gb": 0.2,
+      "type": "dense",
+      "lab": "Google",
+      "modalities": "embeddings",
+      "downloads": 4317,
+      "created": "2025-09-04"
+    },
+    "qwen3-tts:1.7b-8bit": {
+      "repo_id": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit",
+      "params_b": 1.7,
+      "size_gb": 5.2,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text-to-speech",
+      "downloads": 4280,
+      "created": "2026-01-22"
+    },
+    "lfm2.5:1.2b-think-6bit": {
+      "repo_id": "mlx-community/LFM2.5-1.2B-Thinking-6bit",
+      "params_b": 1.2,
+      "size_gb": 1.9,
+      "type": "dense",
+      "lab": "Liquid AI",
+      "modalities": "text",
+      "downloads": 4086,
+      "created": "2026-01-20"
+    },
+    "qwen3.5:397b-a17b-8bit": {
+      "repo_id": "mlx-community/Qwen3.5-397B-A17B-8bit",
+      "params_b": 397.0,
+      "size_gb": 425.5,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 4013,
+      "created": "2026-02-16"
+    },
+    "qwen3.5:9b-bf16": {
+      "repo_id": "mlx-community/Qwen3.5-9B-bf16",
+      "params_b": 9.0,
+      "size_gb": 18.8,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 3990,
+      "created": "2026-03-02"
+    },
+    "qwen3-tts:0.6b-8bit": {
+      "repo_id": "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit",
+      "params_b": 0.6,
+      "size_gb": 3.0,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text-to-speech",
+      "downloads": 3973,
+      "created": "2026-01-22"
+    },
+    "qwen3.5:122b-a10b-6bit": {
+      "repo_id": "mlx-community/Qwen3.5-122B-A10B-6bit",
+      "params_b": 122.0,
+      "size_gb": 100.1,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 3863,
+      "created": "2026-02-24"
+    },
+    "qwen3.5:2b-optiq": {
+      "repo_id": "mlx-community/Qwen3.5-2B-OptiQ-4bit",
+      "params_b": 2.0,
+      "size_gb": 1.5,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 3853,
+      "created": "2026-03-04"
+    },
+    "qwen3.5:35b-a3b-6bit": {
+      "repo_id": "mlx-community/Qwen3.5-35B-A3B-6bit",
+      "params_b": 35.0,
+      "size_gb": 29.1,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 3817,
+      "created": "2026-02-24"
+    },
+    "qwen3-tts:0.6b-custom-8bit": {
+      "repo_id": "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit",
+      "params_b": 0.6,
+      "size_gb": 2.9,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text-to-speech",
+      "downloads": 3779,
+      "created": "2026-01-22"
+    },
+    "minimax-m2.5": {
+      "repo_id": "mlx-community/MiniMax-M2.5-4bit",
+      "params_b": 228.7,
+      "size_gb": 128.7,
+      "type": "dense",
+      "lab": "MiniMax",
+      "modalities": "text",
+      "downloads": 3704,
+      "created": "2026-02-13"
+    },
+    "glm-ocr-bf16": {
+      "repo_id": "mlx-community/GLM-OCR-bf16",
+      "params_b": 1.1,
+      "size_gb": 2.2,
+      "type": "dense",
+      "lab": "Zhipu AI",
+      "modalities": "text, vision",
+      "downloads": 3688,
+      "created": "2026-02-03"
+    },
+    "qwen3-coder-next-bf16": {
+      "repo_id": "mlx-community/Qwen3-Coder-Next-bf16",
+      "params_b": 79.7,
+      "size_gb": 159.4,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 3501,
+      "created": "2026-02-03"
+    },
+    "lfm2-vl:1.6b": {
+      "repo_id": "mlx-community/LFM2-VL-1.6B-4bit",
+      "params_b": 1.6,
+      "size_gb": 1.5,
+      "type": "dense",
+      "lab": "Liquid AI",
+      "modalities": "text, vision",
+      "downloads": 3356,
+      "created": "2025-08-16"
+    },
+    "gemma3:270m-8bit": {
+      "repo_id": "mlx-community/gemma-3-270m-it-8bit",
+      "params_b": 0,
+      "size_gb": 0.5,
+      "type": "dense",
+      "lab": "Google",
+      "modalities": "text",
+      "downloads": 3286,
+      "created": "2025-08-09"
+    },
+    "fastvlm:0.5b-bf16": {
+      "repo_id": "mlx-community/FastVLM-0.5B-bf16",
+      "params_b": 0.5,
+      "size_gb": 1.3,
+      "type": "dense",
+      "lab": "",
+      "modalities": "text, vision",
+      "downloads": 3233,
+      "created": "2025-10-14"
+    },
+    "ministral:8b-reason": {
+      "repo_id": "mlx-community/Ministral-3-8B-Reasoning-2512-4bit",
+      "params_b": 8.0,
+      "size_gb": 5.6,
+      "type": "dense",
+      "lab": "Mistral AI",
+      "modalities": "text",
+      "downloads": 3107,
+      "created": "2025-12-03"
+    },
+    "qwen3-asr:1.7b-8bit": {
+      "repo_id": "mlx-community/Qwen3-ASR-1.7B-8bit",
+      "params_b": 1.7,
+      "size_gb": 2.5,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "audio, speech",
+      "downloads": 3081,
+      "created": "2026-01-29"
+    },
+    "step3.5-flash": {
+      "repo_id": "mlx-community/Step-3.5-Flash-4bit",
+      "params_b": 197.0,
+      "size_gb": 221.6,
+      "type": "dense",
+      "lab": "",
+      "modalities": "text",
+      "downloads": 3055,
+      "created": "2026-02-02"
+    },
+    "qwen3:4b-think": {
+      "repo_id": "mlx-community/Qwen3-4B-Thinking-2507-4bit",
+      "params_b": 4.0,
+      "size_gb": 2.3,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 3047,
+      "created": "2025-08-06"
+    },
+    "qwen3-coder:30b-a3b": {
+      "repo_id": "mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit",
+      "params_b": 30.0,
+      "size_gb": 34.4,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 3046,
+      "created": "2025-07-31"
+    },
+    "qwen3-vl:4b-8bit": {
+      "repo_id": "mlx-community/Qwen3-VL-4B-Instruct-8bit",
+      "params_b": 4.0,
+      "size_gb": 5.1,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 2875,
+      "created": "2025-10-14"
+    },
+    "qwen3.5:4b-mlx-8bit": {
+      "repo_id": "mlx-community/Qwen3.5-4B-MLX-8bit",
+      "params_b": 4.0,
+      "size_gb": 5.2,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 2874,
+      "created": "2026-03-02"
+    },
+    "whisper:large-v3-turbo": {
+      "repo_id": "mlx-community/whisper-large-v3-turbo-4bit",
+      "params_b": 0,
+      "size_gb": 0.9,
+      "type": "dense",
+      "lab": "OpenAI",
+      "modalities": "audio, speech",
+      "downloads": 2866,
+      "created": "2025-12-14"
+    },
+    "qwen3.5:35b-a3b-bf16": {
+      "repo_id": "mlx-community/Qwen3.5-35B-A3B-bf16",
+      "params_b": 35.0,
+      "size_gb": 70.2,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 2856,
+      "created": "2026-02-24"
+    },
+    "qwen3.5:0.8b-optiq": {
+      "repo_id": "mlx-community/Qwen3.5-0.8B-OptiQ-4bit",
+      "params_b": 0.8,
+      "size_gb": 0.6,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 2841,
+      "created": "2026-03-04"
+    },
+    "glm4.7-reap": {
+      "repo_id": "mlx-community/GLM-4.7-REAP-50-mxfp4",
+      "params_b": 0,
+      "size_gb": 98.2,
+      "type": "sparse",
+      "lab": "Zhipu AI",
+      "modalities": "text",
+      "downloads": 2832,
+      "created": "2026-01-03"
+    },
+    "qwen3.5:35b-a3b-abliterated": {
+      "repo_id": "mlx-community/Huihui-Qwen3.5-35B-A3B-abliterated-mxfp4",
+      "params_b": 35.0,
+      "size_gb": 18.4,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 2789,
+      "created": "2026-03-04"
+    },
+    "qwen3.5:122b-a10b-bf16": {
+      "repo_id": "mlx-community/Qwen3.5-122B-A10B-bf16",
+      "params_b": 122.0,
+      "size_gb": 245.1,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 2778,
+      "created": "2026-02-24"
+    },
+    "qwen3-asr:0.6b": {
+      "repo_id": "mlx-community/Qwen3-ASR-0.6B-4bit",
+      "params_b": 0.6,
+      "size_gb": 0.7,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "audio, speech",
+      "downloads": 2756,
+      "created": "2026-01-29"
+    },
+    "qwen3.5:27b-bf16": {
+      "repo_id": "mlx-community/Qwen3.5-27B-bf16",
+      "params_b": 27.0,
+      "size_gb": 54.7,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 2634,
+      "created": "2026-02-24"
+    },
+    "glm5": {
+      "repo_id": "mlx-community/GLM-5",
+      "params_b": 743.9,
+      "size_gb": 1487.8,
+      "type": "sparse",
+      "lab": "Zhipu AI",
+      "modalities": "text",
+      "downloads": 2604,
+      "created": "2026-02-12"
+    },
+    "glm5-4bit-v2": {
+      "repo_id": "mlx-community/GLM-5-4bit",
+      "params_b": 743.9,
+      "size_gb": 418.6,
+      "type": "sparse",
+      "lab": "Zhipu AI",
+      "modalities": "text",
+      "downloads": 2574,
+      "created": "2026-02-12"
+    },
+    "qwen3.5:397b-a17b-nvfp4": {
+      "repo_id": "mlx-community/Qwen3.5-397B-A17B-nvfp4",
+      "params_b": 397.0,
+      "size_gb": 223.0,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 2552,
+      "created": "2026-02-16"
+    },
+    "qwen3-tts:1.7b-voice-8bit": {
+      "repo_id": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit",
+      "params_b": 1.7,
+      "size_gb": 5.1,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text-to-speech",
+      "downloads": 2533,
+      "created": "2026-01-22"
+    },
+    "ministral:14b": {
+      "repo_id": "mlx-community/Ministral-3-14B-Instruct-2512-4bit",
+      "params_b": 14.0,
+      "size_gb": 16.1,
+      "type": "dense",
+      "lab": "Mistral AI",
+      "modalities": "text",
+      "downloads": 2523,
+      "created": "2025-12-03"
+    },
+    "qwen3.5:9b-6bit": {
+      "repo_id": "mlx-community/Qwen3.5-9B-6bit",
+      "params_b": 9.0,
+      "size_gb": 8.2,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 2492,
+      "created": "2026-03-02"
+    },
+    "qwen3.5:35b-a3b-abliterated-6bit": {
+      "repo_id": "mlx-community/Huihui-Qwen3.5-35B-A3B-abliterated-6bit",
+      "params_b": 35.0,
+      "size_gb": 28.2,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 2452,
+      "created": "2026-03-04"
+    },
+    "glm5-8bit": {
+      "repo_id": "mlx-community/GLM-5-8bit-MXFP8",
+      "params_b": 743.9,
+      "size_gb": 767.3,
+      "type": "sparse",
+      "lab": "Zhipu AI",
+      "modalities": "text",
+      "downloads": 2253,
+      "created": "2026-02-12"
+    },
+    "devstral:24b-8bit": {
+      "repo_id": "mlx-community/mistralai_Devstral-Small-2-24B-Instruct-2512-MLX-8Bit",
+      "params_b": 24.0,
+      "size_gb": 25.1,
+      "type": "dense",
+      "lab": "Mistral AI",
+      "modalities": "text",
+      "downloads": 2116,
+      "created": "2025-12-14"
+    },
+    "qwen3-coder-next-6bit": {
+      "repo_id": "mlx-community/Qwen3-Coder-Next-6bit",
+      "params_b": 79.7,
+      "size_gb": 64.8,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 2102,
+      "created": "2026-02-03"
+    },
+    "qwen3-coder-next-5bit": {
+      "repo_id": "mlx-community/Qwen3-Coder-Next-5bit",
+      "params_b": 79.7,
+      "size_gb": 54.8,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 2097,
+      "created": "2026-02-03"
+    },
+    "qwen3.5:0.8b-6bit": {
+      "repo_id": "mlx-community/Qwen3.5-0.8B-6bit",
+      "params_b": 0.8,
+      "size_gb": 0.8,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 2040,
+      "created": "2026-03-02"
+    },
+    "qwen3.5:397b-a17b-6bit": {
+      "repo_id": "mlx-community/Qwen3.5-397B-A17B-6bit",
+      "params_b": 397.0,
+      "size_gb": 323.0,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 1942,
+      "created": "2026-02-18"
+    },
+    "minimax-m2.5-6bit": {
+      "repo_id": "mlx-community/MiniMax-M2.5-6bit",
+      "params_b": 228.7,
+      "size_gb": 185.8,
+      "type": "dense",
+      "lab": "MiniMax",
+      "modalities": "text",
+      "downloads": 1894,
+      "created": "2026-02-13"
+    },
+    "qwen3.5:122b-a10b-5bit": {
+      "repo_id": "mlx-community/Qwen3.5-122B-A10B-5bit",
+      "params_b": 122.0,
+      "size_gb": 84.9,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 1869,
+      "created": "2026-02-24"
+    },
+    "deepseek-ocr-8bit": {
+      "repo_id": "mlx-community/DeepSeek-OCR-8bit",
+      "params_b": 1.2,
+      "size_gb": 7.8,
+      "type": "dense",
+      "lab": "DeepSeek",
+      "modalities": "text, vision",
+      "downloads": 1864,
+      "created": "2025-10-27"
+    },
+    "qwen3-tts:1.7b-voice-bf16": {
+      "repo_id": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-bf16",
+      "params_b": 1.7,
+      "size_gb": 4.5,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text-to-speech",
+      "downloads": 1815,
+      "created": "2026-01-22"
+    },
+    "nanbeige4.1:3b-8bit": {
+      "repo_id": "mlx-community/Nanbeige4.1-3B-8bit",
+      "params_b": 3.0,
+      "size_gb": 4.2,
+      "type": "dense",
+      "lab": "",
+      "modalities": "text",
+      "downloads": 1752,
+      "created": "2026-02-11"
+    },
+    "mistral-small4:119b": {
+      "repo_id": "mlx-community/Mistral-Small-4-119B-2603-4bit",
+      "params_b": 119.0,
+      "size_gb": 135.5,
+      "type": "dense",
+      "lab": "Mistral AI",
+      "modalities": "text",
+      "downloads": 1748,
+      "created": "2026-03-17"
+    },
+    "qwen3.5:0.8b-bf16": {
+      "repo_id": "mlx-community/Qwen3.5-0.8B-MLX-bf16",
+      "params_b": 0.8,
+      "size_gb": 1.7,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 1745,
+      "created": "2026-03-02"
+    },
+    "qwen3.5:35b-a3b-5bit": {
+      "repo_id": "mlx-community/Qwen3.5-35B-A3B-5bit",
+      "params_b": 35.0,
+      "size_gb": 24.7,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 1705,
+      "created": "2026-02-24"
+    },
+    "minimax-m2.5-3bit": {
+      "repo_id": "mlx-community/MiniMax-M2.5-3bit",
+      "params_b": 228.7,
+      "size_gb": 100.1,
+      "type": "dense",
+      "lab": "MiniMax",
+      "modalities": "text",
+      "downloads": 1699,
+      "created": "2026-02-13"
+    },
+    "deepseek-v3.2": {
+      "repo_id": "mlx-community/DeepSeek-V3.2-4bit",
+      "params_b": 671.9,
+      "size_gb": 378.1,
+      "type": "sparse",
+      "lab": "DeepSeek",
+      "modalities": "text",
+      "downloads": 1655,
+      "created": "2025-12-01"
+    },
+    "minimax-m2": {
+      "repo_id": "mlx-community/MiniMax-M2-4bit",
+      "params_b": 0,
+      "size_gb": 128.7,
+      "type": "dense",
+      "lab": "MiniMax",
+      "modalities": "text",
+      "downloads": 1641,
+      "created": "2025-10-27"
+    },
+    "qwen3-tts:0.6b": {
+      "repo_id": "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-4bit",
+      "params_b": 0.6,
+      "size_gb": 2.2,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text-to-speech",
+      "downloads": 1594,
+      "created": "2026-01-22"
+    },
+    "kimi-k2.5-dq3": {
+      "repo_id": "mlx-community/Kimi-K2.5-mlx-DQ3_K_M-q8",
+      "params_b": 1026.4,
+      "size_gb": 470.6,
+      "type": "dense",
+      "lab": "Moonshot AI",
+      "modalities": "text",
+      "downloads": 1576,
+      "created": "2026-02-21"
+    },
+    "step3.5-flash-8bit": {
+      "repo_id": "mlx-community/Step-3.5-Flash-8bit",
+      "params_b": 197.0,
+      "size_gb": 209.3,
+      "type": "dense",
+      "lab": "",
+      "modalities": "text",
+      "downloads": 1569,
+      "created": "2026-02-04"
+    },
+    "nemotron-nano:30b-a3b-nvfp4": {
+      "repo_id": "mlx-community/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4",
+      "params_b": 30.0,
+      "size_gb": 19.3,
+      "type": "sparse",
+      "lab": "NVIDIA",
+      "modalities": "text",
+      "downloads": 1536,
+      "created": "2026-01-29"
+    },
+    "qwen3.5:27b-abliterated": {
+      "repo_id": "mlx-community/Huihui-Qwen3.5-27B-Claude-4.6-Opus-abliterated-4bit",
+      "params_b": 27.0,
+      "size_gb": 16.1,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 1482,
+      "created": "2026-03-14"
+    },
+    "qwen3-tts:0.6b-bf16": {
+      "repo_id": "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16",
+      "params_b": 0.6,
+      "size_gb": 2.5,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text-to-speech",
+      "downloads": 1470,
+      "created": "2026-01-22"
+    },
+    "qwen3-vl:4b-3bit": {
+      "repo_id": "mlx-community/Qwen3-VL-4B-Instruct-3bit",
+      "params_b": 4.0,
+      "size_gb": 2.6,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 1441,
+      "created": "2025-10-14"
+    },
+    "lfm2:350m": {
+      "repo_id": "mlx-community/LFM2-350M-4bit",
+      "params_b": 0.1,
+      "size_gb": 0.2,
+      "type": "dense",
+      "lab": "Liquid AI",
+      "modalities": "text",
+      "downloads": 1437,
+      "created": "2025-07-11"
+    },
+    "granite-4.0-h-micro-4bit": {
+      "repo_id": "mlx-community/granite-4.0-h-micro-4bit",
+      "params_b": 0,
+      "size_gb": 1.8,
+      "type": "sparse",
+      "lab": "IBM",
+      "modalities": "text",
+      "downloads": 1429,
+      "created": "2025-10-04"
+    },
+    "qwen3.5:27b-mxfp8": {
+      "repo_id": "mlx-community/Qwen3.5-27B-mxfp8",
+      "params_b": 27.0,
+      "size_gb": 28.7,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 1424,
+      "created": "2026-03-04"
+    },
+    "qwen3.5:27b-5bit": {
+      "repo_id": "mlx-community/Qwen3.5-27B-5bit",
+      "params_b": 27.0,
+      "size_gb": 19.4,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 1423,
+      "created": "2026-02-24"
+    },
+    "kimi-dev:72b": {
+      "repo_id": "mlx-community/Kimi-Dev-72B-4bit-DWQ",
+      "params_b": 72.0,
+      "size_gb": 40.9,
+      "type": "dense",
+      "lab": "Moonshot AI",
+      "modalities": "text",
+      "downloads": 1379,
+      "created": "2025-07-12"
+    },
+    "step3.5-flash-6bit": {
+      "repo_id": "mlx-community/Step-3.5-Flash-6bit",
+      "params_b": 197.0,
+      "size_gb": 320.1,
+      "type": "dense",
+      "lab": "",
+      "modalities": "text",
+      "downloads": 1362,
+      "created": "2026-02-03"
+    },
+    "glm4.7-flash-claude-distill": {
+      "repo_id": "mlx-community/GLM-4.7-Flash-Claude-Opus-4.5-High-Reasoning-Distill-4bit",
+      "params_b": 29.9,
+      "size_gb": 16.9,
+      "type": "sparse",
+      "lab": "Zhipu AI",
+      "modalities": "text",
+      "downloads": 1361,
+      "created": "2026-02-15"
+    },
+    "qwen3.5:2b-bf16": {
+      "repo_id": "mlx-community/Qwen3.5-2B-bf16",
+      "params_b": 2.0,
+      "size_gb": 4.4,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 1321,
+      "created": "2026-03-02"
+    },
+    "qwen3.5:9b-mlx-bf16": {
+      "repo_id": "mlx-community/Qwen3.5-9B-MLX-bf16",
+      "params_b": 9.0,
+      "size_gb": 18.8,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 1301,
+      "created": "2026-03-02"
+    },
+    "kimi-k2.5-3bit": {
+      "repo_id": "mlx-community/Kimi-K2.5-3bit",
+      "params_b": 1026.4,
+      "size_gb": 449.3,
+      "type": "dense",
+      "lab": "Moonshot AI",
+      "modalities": "text",
+      "downloads": 1280,
+      "created": "2026-02-07"
+    },
+    "whisper:large-v3-turbo-fp16": {
+      "repo_id": "mlx-community/whisper-large-v3-turbo-asr-fp16",
+      "params_b": 0.8,
+      "size_gb": 1.6,
+      "type": "dense",
+      "lab": "OpenAI",
+      "modalities": "audio, speech",
+      "downloads": 1270,
+      "created": "2026-01-13"
+    },
+    "qwen3.5:2b-5bit": {
+      "repo_id": "mlx-community/Qwen3.5-2B-5bit",
+      "params_b": 2.0,
+      "size_gb": 2.0,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 1263,
+      "created": "2026-03-02"
+    },
+    "lfm2.5:1.2b-8bit": {
+      "repo_id": "mlx-community/LFM2.5-1.2B-Instruct-8bit",
+      "params_b": 1.2,
+      "size_gb": 1.2,
+      "type": "dense",
+      "lab": "Liquid AI",
+      "modalities": "text",
+      "downloads": 1261,
+      "created": "2026-01-06"
+    },
+    "minimax-m2.5-5bit": {
+      "repo_id": "mlx-community/MiniMax-M2.5-5bit",
+      "params_b": 228.7,
+      "size_gb": 157.3,
+      "type": "dense",
+      "lab": "MiniMax",
+      "modalities": "text",
+      "downloads": 1227,
+      "created": "2026-02-13"
+    },
+    "qwen3-vl:8b": {
+      "repo_id": "mlx-community/Qwen3-VL-8B-Instruct-4bit",
+      "params_b": 8.0,
+      "size_gb": 5.8,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 1223,
+      "created": "2025-10-14"
+    },
+    "voxtral-mini:4b": {
+      "repo_id": "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit",
+      "params_b": 4.0,
+      "size_gb": 3.1,
+      "type": "dense",
+      "lab": "",
+      "modalities": "audio, speech",
+      "downloads": 1220,
+      "created": "2026-02-06"
+    },
+    "qwen3.5:27b-abliterated-6bit": {
+      "repo_id": "mlx-community/Huihui-Qwen3.5-27B-Claude-4.6-Opus-abliterated-6bit",
+      "params_b": 27.0,
+      "size_gb": 38.9,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 1205,
+      "created": "2026-03-14"
+    },
+    "qwen3.5:2b-8bit": {
+      "repo_id": "mlx-community/Qwen3.5-2B-8bit",
+      "params_b": 2.0,
+      "size_gb": 2.7,
+      "type": "dense",
+      "lab": "Alibaba",
+      "modalities": "text, vision",
+      "downloads": 1198,
+      "created": "2026-03-02"
+    },
+    "soprano:80m-bf16": {
+      "repo_id": "mlx-community/Soprano-80M-bf16",
+      "params_b": 0.1,
+      "size_gb": 0.4,
+      "type": "dense",
+      "lab": "",
+      "modalities": "text-to-speech",
+      "downloads": 1196,
+      "created": "2026-01-04"
+    },
+    "glm4.6": {
+      "repo_id": "mlx-community/GLM-4.6-4bit",
+      "params_b": 352.8,
+      "size_gb": 198.6,
+      "type": "sparse",
+      "lab": "Zhipu AI",
+      "modalities": "text",
+      "downloads": 1194,
+      "created": "2025-09-30"
+    },
+    "dolphin3:1b-llama3.2": {
+      "repo_id": "mlx-community/dolphin3.0-llama3.2-1B-4Bit",
+      "params_b": 1.0,
+      "size_gb": 0.7,
+      "type": "dense",
+      "lab": "Meta",
+      "modalities": "text",
+      "downloads": 1123,
+      "created": "2025-08-19"
+    },
+    "fish-audio-s2-pro-bf16": {
+      "repo_id": "mlx-community/fish-audio-s2-pro-bf16",
+      "params_b": 4.6,
+      "size_gb": 11.0,
+      "type": "dense",
+      "lab": "",
+      "modalities": "text-to-speech",
+      "downloads": 1119,
+      "created": "2026-03-11"
+    },
+    "s3tokenizer-v2": {
+      "repo_id": "mlx-community/S3TokenizerV2",
+      "params_b": 0,
+      "size_gb": 0.5,
+      "type": "dense",
+      "lab": "",
+      "modalities": "audio, speech",
+      "downloads": 1105,
+      "created": "2025-12-05"
+    },
+    "kimi-k2-0905-dq3": {
+      "repo_id": "mlx-community/Kimi-K2-Instruct-0905-mlx-DQ3_K_M",
+      "params_b": 1026.4,
+      "size_gb": 468.4,
+      "type": "dense",
+      "lab": "Moonshot AI",
+      "modalities": "text",
+      "downloads": 1096,
+      "created": "2025-09-06"
+    },
+    "translategemma:12b-8bit": {
+      "repo_id": "mlx-community/translategemma-12b-it-8bit",
+      "params_b": 12.0,
+      "size_gb": 12.5,
+      "type": "dense",
+      "lab": "Google",
+      "modalities": "text",
+      "downloads": 1087,
+      "created": "2026-01-15"
+    },
+    "gpt-oss:120b-mxfp4q4": {
+      "repo_id": "mlx-community/gpt-oss-120b-MXFP4-Q4",
+      "params_b": 120.0,
+      "size_gb": 62.4,
+      "type": "dense",
+      "lab": "OpenAI",
+      "modalities": "text",
+      "downloads": 1072,
+      "created": "2025-08-29"
+    },
+    "nemotron-super:49b": {
+      "repo_id": "mlx-community/Llama-3_3-Nemotron-Super-49B-v1_5-mlx-4Bit",
+      "params_b": 49.0,
+      "size_gb": 28.1,
+      "type": "dense",
+      "lab": "Meta",
+      "modalities": "text",
+      "downloads": 1072,
+      "created": "2025-09-15"
+    },
+    "minimax-m2.1-6bit": {
+      "repo_id": "mlx-community/MiniMax-M2.1-6bit",
+      "params_b": 228.7,
+      "size_gb": 185.8,
+      "type": "dense",
+      "lab": "MiniMax",
+      "modalities": "text",
+      "downloads": 1070,
+      "created": "2025-12-26"
+    },
+    "qwen3-coder:30b-a3b-6bit": {
+      "repo_id": "mlx-community/Qwen3-Coder-30B-A3B-Instruct-6bit",
+      "params_b": 30.0,
+      "size_gb": 24.8,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 1053,
+      "created": "2025-07-31"
+    },
+    "qwen3-coder:30b-a3b-5bit": {
+      "repo_id": "mlx-community/Qwen3-Coder-30B-A3B-Instruct-5bit",
+      "params_b": 30.0,
+      "size_gb": 21.0,
+      "type": "sparse",
+      "lab": "Alibaba",
+      "modalities": "text",
+      "downloads": 1026,
+      "created": "2025-07-31"
+    },
+    "deepseek-ocr2-bf16": {
+      "repo_id": "mlx-community/DeepSeek-OCR-2-bf16",
+      "params_b": 3.4,
+      "size_gb": 6.8,
+      "type": "dense",
+      "lab": "DeepSeek",
+      "modalities": "text, vision",
+      "downloads": 1012,
+      "created": "2026-01-28"
+    },
+    "granite-4.0-h-tiny-4bit": {
+      "repo_id": "mlx-community/granite-4.0-h-tiny-4bit",
+      "params_b": 0,
+      "size_gb": 3.9,
+      "type": "sparse",
+      "lab": "IBM",
+      "modalities": "text",
+      "downloads": 1008,
+      "created": "2025-10-04"
+    }
+  }
+}

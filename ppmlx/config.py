@@ -35,11 +35,17 @@ class MemoryConfig:
 
 
 @dataclass
+class RegistryConfig:
+    enabled: bool = True
+
+
+@dataclass
 class Config:
     server: ServerConfig = field(default_factory=ServerConfig)
     defaults: DefaultsConfig = field(default_factory=DefaultsConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
+    registry: RegistryConfig = field(default_factory=RegistryConfig)
 
 
 def get_ppmlx_dir() -> Path:
@@ -91,6 +97,9 @@ def _apply_toml(cfg: Config, data: dict) -> None:
     if "memory" in data:
         m = data["memory"]
         if "wired_limit_mb" in m: cfg.memory.wired_limit_mb = int(m["wired_limit_mb"])
+    if "registry" in data:
+        r = data["registry"]
+        if "enabled" in r: cfg.registry.enabled = bool(r["enabled"])
 
 
 def _apply_env(cfg: Config) -> None:
@@ -107,6 +116,7 @@ def _apply_env(cfg: Config) -> None:
         "PPMLX_LOG_ENABLED": ("logging", "enabled", _parse_bool),
         "PPMLX_LOG_SNAPSHOT_INTERVAL": ("logging", "snapshot_interval_seconds", int),
         "PPMLX_MEMORY_WIRED_LIMIT": ("memory", "wired_limit_mb", int),
+        "PPMLX_REGISTRY_ENABLED": ("registry", "enabled", _parse_bool),
     }
     for env_key, (section, attr, coerce) in mapping.items():
         val = os.environ.get(env_key)

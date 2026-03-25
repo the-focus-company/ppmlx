@@ -55,8 +55,15 @@ def test_resolve_alias_unknown_raises(tmp_home):
 
 
 def test_is_vision_model_true():
-    # Qwen3.5 models are vision (contain "Qwen3.5-")
-    assert is_vision_model("mlx-community/Qwen3.5-4B-MLX-4bit") is True
+    # Models with -VL- or -vlm in repo ID are vision models
+    assert is_vision_model("mlx-community/Qwen2.5-VL-7B-Instruct-4bit") is True
+    assert is_vision_model("mlx-community/llava-v1.6-mistral-7b-vlm-4bit") is True
+
+
+def test_is_vision_model_false_standard():
+    # Standard text models (no -VL- or -vlm) are not vision models
+    assert is_vision_model("mlx-community/Qwen3.5-4B-MLX-4bit") is False
+    assert is_vision_model("mlx-community/Meta-Llama-3-8B-Instruct-4bit") is False
 
 
 def test_is_vision_model_false_text_only():

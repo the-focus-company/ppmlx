@@ -65,6 +65,7 @@ curl http://localhost:6767/v1/embeddings \
 | Endpoint | Description |
 |---|---|
 | `POST /v1/chat/completions` | Chat (streaming supported) |
+| `POST /v1/responses` | Responses API (Codex, newer OpenAI tools) |
 | `POST /v1/completions` | Text completion |
 | `POST /v1/embeddings` | Embeddings |
 | `GET /v1/models` | List loaded/available models |

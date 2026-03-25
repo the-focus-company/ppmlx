@@ -199,6 +199,24 @@ def test_no_thinking_unchanged():
 
 
 # ---------------------------------------------------------------------------
+# 8b. Template-injected think block (no opening <think>)
+# ---------------------------------------------------------------------------
+def test_strip_thinking_no_opening_tag():
+    """Qwen3 template injects <think> into the prompt, so the model output
+    starts inside the think block — only </think> appears in the text."""
+    from ppmlx.engine import _strip_thinking
+
+    text, reasoning = _strip_thinking("reasoning content\n</think>\nactual answer")
+    assert text == "actual answer"
+    assert reasoning == "reasoning content"
+
+    # Only closing tag, no reasoning
+    text, reasoning = _strip_thinking("</think>answer only")
+    assert text == "answer only"
+    assert reasoning is None
+
+
+# ---------------------------------------------------------------------------
 # 9. unload
 # ---------------------------------------------------------------------------
 def test_unload():
@@ -308,3 +326,72 @@ def test_chat_template_applied():
         tokenize=False,
         add_generation_prompt=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# 15. stream_generate strips <think> blocks by default
+# ---------------------------------------------------------------------------
+def test_stream_generate_strips_think_blocks():
+    chunks = ["<think>", "reasoning", " here", "</think>", "answer", " text"]
+    fake, _, _ = _make_fake_mlx_lm(stream_chunks=chunks)
+    _install_fake(fake)
+
+    from ppmlx.engine import TextEngine, reset_engine
+    reset_engine()
+    engine = TextEngine(max_loaded=2)
+
+    result = "".join(engine.stream_generate(
+        "some/model", [{"role": "user", "content": "hi"}]
+    ))
+    assert "<think>" not in result
+    assert "</think>" not in result
+    assert "reasoning" not in result
+    assert "answer text" == result
+
+
+def test_stream_generate_strips_think_split_across_chunks():
+    # Tags split across token boundaries
+    chunks = ["<thi", "nk>", "internal", "</thi", "nk>", "visible"]
+    fake, _, _ = _make_fake_mlx_lm(stream_chunks=chunks)
+    _install_fake(fake)
+
+    from ppmlx.engine import TextEngine, reset_engine
+    reset_engine()
+    engine = TextEngine(max_loaded=2)
+
+    result = "".join(engine.stream_generate(
+        "some/model", [{"role": "user", "content": "hi"}]
+    ))
+    assert result == "visible"
+
+
+def test_stream_generate_no_think_tags_passes_through():
+    chunks = ["Hello", " ", "world"]
+    fake, _, _ = _make_fake_mlx_lm(stream_chunks=chunks)
+    _install_fake(fake)
+
+    from ppmlx.engine import TextEngine, reset_engine
+    reset_engine()
+    engine = TextEngine(max_loaded=2)
+
+    result = "".join(engine.stream_generate(
+        "some/model", [{"role": "user", "content": "hi"}]
+    ))
+    assert result == "Hello world"
+
+
+def test_stream_generate_strip_thinking_false():
+    chunks = ["<think>", "reason", "</think>", "answer"]
+    fake, _, _ = _make_fake_mlx_lm(stream_chunks=chunks)
+    _install_fake(fake)
+
+    from ppmlx.engine import TextEngine, reset_engine
+    reset_engine()
+    engine = TextEngine(max_loaded=2)
+
+    result = "".join(engine.stream_generate(
+        "some/model", [{"role": "user", "content": "hi"}],
+        strip_thinking=False,
+    ))
+    assert "<think>" in result
+    assert "reason" in result
