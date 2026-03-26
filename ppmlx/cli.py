@@ -1751,6 +1751,49 @@ def ps():
 
 
 @app.command()
+def compat(
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Save JSON results to file"),
+    markdown: bool = typer.Option(False, "--markdown", "-m", help="Print markdown table to stdout"),
+):
+    """Run framework compatibility tests and show results matrix."""
+    from ppmlx.compat import run_compat_suite, setup_mocks
+
+    setup_mocks()
+
+    from fastapi.testclient import TestClient
+    from ppmlx.server import app as server_app
+
+    with TestClient(server_app) as client:
+        matrix = run_compat_suite(client)
+
+    if markdown:
+        console.print(matrix.to_markdown())
+    else:
+        table = Table(title="ppmlx Framework Compatibility")
+        table.add_column("Framework", style="cyan")
+        table.add_column("Feature")
+        table.add_column("Status")
+        table.add_column("Time (ms)", justify="right")
+
+        for r in matrix.results:
+            status = "[green]PASS[/green]" if r.passed else f"[red]FAIL[/red] {r.error or ''}"
+            table.add_row(r.framework, r.feature, status, f"{r.duration_ms:.1f}")
+
+        console.print(table)
+        console.print(
+            f"\n[bold]{matrix.passed}/{matrix.total} tests passed[/bold]"
+        )
+        if matrix.failed > 0:
+            console.print(f"[red]{matrix.failed} test(s) failed[/red]")
+
+    if output:
+        import json as _json
+        with open(output, "w") as f:
+            _json.dump(matrix.to_dict(), f, indent=2)
+        console.print(f"[dim]Results saved to {output}[/dim]")
+
+
+@app.command()
 def quantize(
     model: Optional[str] = typer.Argument(None, help="HuggingFace repo ID or alias"),
     bits: int = typer.Option(4, "--bits", "-b", help="Quantization bits (2,3,4,6,8)"),
