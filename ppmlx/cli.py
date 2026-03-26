@@ -2033,5 +2033,198 @@ def registry(
     console.print(f"[dim]Disable:       set [registry] enabled = false in ~/.ppmlx/config.toml[/dim]")
 
 
+@app.command()
+def process(
+    directory: str = typer.Argument(..., help="Directory of files to process"),
+    task: str = typer.Option("summarize", "--task", "-t", help="Task: summarize, translate, extract_entities, classify, or 'custom:Your prompt here'"),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="Model name or alias"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Output directory (default: alongside originals)"),
+    parallel: int = typer.Option(1, "--parallel", "-p", help="Number of concurrent workers"),
+    resume: bool = typer.Option(False, "--resume", "-r", help="Resume from checkpoint"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be processed without running"),
+    temperature: float = typer.Option(0.7, "--temperature", help="Sampling temperature"),
+    max_tokens: Optional[int] = typer.Option(None, "--max-tokens", help="Max tokens per response"),
+    base_url: str = typer.Option("http://localhost:6767", "--base-url", help="ppmlx server URL"),
+    timeout: float = typer.Option(120.0, "--timeout", help="Per-file timeout in seconds"),
+    pipe: bool = typer.Option(False, "--pipe", help="Output results to stdout for piping"),
+    no_recursive: bool = typer.Option(False, "--no-recursive", help="Do not recurse into subdirectories"),
+):
+    """Process a directory of documents with an LLM task.
+
+    Supports summarize, translate, extract_entities, classify, or custom prompts.
+    Requires a ppmlx server running (start with: ppmlx serve).
+
+    Examples:
+
+        ppmlx process ./docs --task summarize --model qwen3.5
+
+        ppmlx process ./src --task "custom:Explain this code" --model llama3
+
+        ppmlx process ./docs --task translate --output ./translated/ --parallel 3
+
+        ppmlx process ./docs --task summarize --dry-run
+    """
+    from ppmlx.processor import (
+        BUILTIN_TASKS, CheckpointState, ProcessResult,
+        discover_files, make_custom_task, process_batch,
+    )
+
+    dir_path = Path(directory).resolve()
+    if not dir_path.is_dir():
+        console.print(f"[red]Not a directory: {directory}[/red]")
+        raise typer.Exit(1)
+
+    # Resolve task
+    if task.startswith("custom:"):
+        custom_prompt = task[len("custom:"):]
+        if not custom_prompt.strip():
+            console.print("[red]Custom task requires a prompt after 'custom:'[/red]")
+            raise typer.Exit(1)
+        task_def = make_custom_task(custom_prompt)
+    elif task in BUILTIN_TASKS:
+        task_def = BUILTIN_TASKS[task]
+    else:
+        valid = ", ".join(sorted(BUILTIN_TASKS.keys()))
+        console.print(f"[red]Unknown task '{task}'. Valid tasks: {valid}, or 'custom:Your prompt'[/red]")
+        raise typer.Exit(1)
+
+    # Model selection
+    if model is None:
+        console.print("[yellow]No model specified. Use --model <name> or set a default.[/yellow]")
+        raise typer.Exit(1)
+
+    # Discover files
+    files = discover_files(
+        dir_path,
+        recursive=not no_recursive,
+    )
+
+    if not files:
+        console.print(f"[yellow]No processable files found in {directory}[/yellow]")
+        raise typer.Exit(0)
+
+    # Dry run
+    if dry_run:
+        from rich.table import Table as RichTable
+        from ppmlx.memory import format_size
+
+        table = RichTable(title=f"Dry Run: {task_def.name} ({len(files)} files)")
+        table.add_column("File", style="cyan")
+        table.add_column("Size", justify="right")
+        table.add_column("Output", style="green")
+
+        output_dir = Path(output) if output else None
+        for f in files:
+            size_str = format_size(f.stat().st_size)
+
+            if output_dir:
+                out = str(output_dir / (f.stem + task_def.output_suffix))
+            else:
+                out = str(f.parent / (f.stem + task_def.output_suffix))
+
+            rel_path = str(f.relative_to(dir_path))
+            table.add_row(rel_path, size_str, out)
+
+        console.print(table)
+        console.print(f"\n[dim]Run without --dry-run to process these files.[/dim]")
+        return
+
+    # Resume support
+    checkpoint: CheckpointState | None = None
+    if resume:
+        checkpoint = CheckpointState.load(dir_path)
+        if checkpoint is not None:
+            skipped = sum(1 for f in files if checkpoint.is_completed(str(f)))
+            console.print(f"[green]Resuming: {skipped} files already completed, {len(files) - skipped} remaining.[/green]")
+        else:
+            console.print("[dim]No checkpoint found, starting fresh.[/dim]")
+
+    if checkpoint is None:
+        checkpoint = CheckpointState(
+            task=task_def.name,
+            model=model,
+            directory=str(dir_path),
+            started_at=time.strftime("%Y-%m-%dT%H:%M:%S"),
+        )
+
+    output_dir = Path(output) if output else None
+
+    # Progress tracking with Rich
+    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        TimeRemainingColumn(),
+        console=console,
+        disable=pipe,
+    ) as progress:
+        pending_count = sum(1 for f in files if not checkpoint.is_completed(str(f)))
+        progress_task = progress.add_task(
+            f"Processing ({task_def.name})",
+            total=pending_count,
+        )
+
+        def on_progress(file_path: Path, result: ProcessResult) -> None:
+            status = "[green]ok[/green]" if result.success else f"[red]FAIL: {result.error}[/red]"
+            if not pipe:
+                progress.console.print(
+                    f"  {file_path.name} {status} ({result.duration_secs:.1f}s)",
+                    highlight=False,
+                )
+            progress.advance(progress_task)
+
+        results, stats = process_batch(
+            files,
+            task_def,
+            model,
+            base_url,
+            output_dir=output_dir,
+            parallel=parallel,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            timeout=timeout,
+            checkpoint=checkpoint,
+            checkpoint_dir=dir_path,
+            progress_callback=on_progress,
+            stdout_mode=pipe,
+        )
+
+    # Pipe mode: print outputs to stdout
+    if pipe:
+        for r in results:
+            if r.success and r.output_text:
+                print(f"--- {r.file_path} ---")
+                print(r.output_text)
+                print()
+        return
+
+    # Summary
+    console.print()
+    if stats.completed > 0 or stats.failed > 0:
+        console.print(Panel(
+            f"[bold]Task:[/bold] {task_def.name}\n"
+            f"[bold]Files:[/bold] {stats.total_files} total, "
+            f"[green]{stats.completed} completed[/green], "
+            f"[red]{stats.failed} failed[/red]"
+            + (f", {stats.skipped} skipped (resumed)" if stats.skipped else "") + "\n"
+            f"[bold]Tokens:[/bold] {stats.total_tokens:,}\n"
+            f"[bold]Duration:[/bold] {stats.total_duration:.1f}s",
+            title="Processing Complete",
+            border_style="green" if stats.failed == 0 else "yellow",
+        ))
+
+    # Clean up checkpoint if everything succeeded
+    if stats.failed == 0:
+        checkpoint.cleanup(dir_path)
+    else:
+        console.print(f"[yellow]Checkpoint saved. Re-run with --resume to retry failed files.[/yellow]")
+
+    if stats.failed > 0:
+        raise typer.Exit(1)
+
+
 if __name__ == "__main__":
     app()
