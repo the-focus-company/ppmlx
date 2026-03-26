@@ -1003,7 +1003,6 @@ def run(
     if not model:
         model = _pick_model()
     from ppmlx.models import get_model_path, download_model, resolve_alias, ModelNotFoundError
-    from ppmlx.engine import get_engine
     from ppmlx.memory import check_memory_warning
 
     try:
@@ -1028,10 +1027,34 @@ def run(
     if warning:
         console.print(f"[yellow]{warning}[/yellow]")
 
-    engine = get_engine()
-    messages = []
+    messages: list[dict] = []
     if system:
         messages.append({"role": "system", "content": system})
+
+    _run_repl(
+        model=model,
+        repo_id=repo_id,
+        local_path=local_path,
+        messages=messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+
+
+def _run_repl(
+    *,
+    model: str,
+    repo_id: str,
+    local_path: str | Path | None,
+    messages: list[dict],
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+    conversation_id: str | None = None,
+) -> None:
+    """Run the interactive chat REPL. Used by both 'run' and 'history resume'."""
+    from ppmlx.engine import get_engine
+
+    engine = get_engine()
 
     # Session state
     history_enabled = True
@@ -1039,6 +1062,15 @@ def run(
     verbose = False
     format_json = False
     think = False
+
+    # Persistent history: create or resume a conversation
+    from ppmlx.history import get_history
+    hm = get_history()
+    if conversation_id is None:
+        conversation_id = hm.create_conversation(model)
+        # Save any pre-existing messages (e.g. system prompt)
+        for m in messages:
+            hm.add_message(conversation_id, m["role"], m["content"])
 
     from prompt_toolkit import PromptSession
     from prompt_toolkit.history import InMemoryHistory
@@ -1372,6 +1404,8 @@ def run(
 
             if history_enabled:
                 messages.append({"role": "user", "content": user_content})
+                content_str = user_input if isinstance(user_content, str) else json.dumps(user_content)
+                hm.add_message(conversation_id, "user", content_str)
 
             # Build messages to send (inject JSON instruction if needed)
             send_msgs = list(messages) if history_enabled else []
@@ -1476,6 +1510,7 @@ def run(
 
             if history_enabled:
                 messages.append({"role": "assistant", "content": full_response})
+                hm.add_message(conversation_id, "assistant", full_response)
             continue
 
         continue
@@ -2031,6 +2066,229 @@ def registry(
     console.print(table)
     console.print(f"\n[dim]Pull a model:  ppmlx pull <alias>[/dim]")
     console.print(f"[dim]Disable:       set [registry] enabled = false in ~/.ppmlx/config.toml[/dim]")
+
+
+# ── History subcommands ──────────────────────────────────────────────
+
+history_app = typer.Typer(
+    name="history",
+    help="Browse, search, and manage conversation history.",
+    no_args_is_help=True,
+)
+app.add_typer(history_app, name="history")
+
+
+@history_app.command(name="list")
+def history_list(
+    limit: int = typer.Option(20, "--limit", "-n", help="Max conversations to show"),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="Filter by model"),
+):
+    """List recent conversations."""
+    from ppmlx.history import get_history
+
+    hm = get_history()
+    convs = hm.list_conversations(limit=limit, model=model)
+    if not convs:
+        console.print("[dim]No conversations found.[/dim]")
+        return
+
+    table = Table(title="Conversation History")
+    table.add_column("ID", style="cyan", no_wrap=True)
+    table.add_column("Model", style="green")
+    table.add_column("Title")
+    table.add_column("Messages", justify="right")
+    table.add_column("Updated", style="dim")
+    for c in convs:
+        table.add_row(
+            c["id"],
+            c["model"],
+            c["title"] or "(untitled)",
+            str(c["message_count"]),
+            c["updated_at"][:19],
+        )
+    console.print(table)
+
+
+@history_app.command(name="search")
+def history_search(
+    query: str = typer.Argument(..., help="Search query"),
+    limit: int = typer.Option(20, "--limit", "-n", help="Max results"),
+):
+    """Full-text search across all conversations."""
+    from ppmlx.history import get_history
+
+    hm = get_history()
+    results = hm.search(query, limit=limit)
+    if not results:
+        console.print("[dim]No matches found.[/dim]")
+        return
+
+    table = Table(title=f"Search results for '{query}'")
+    table.add_column("ID", style="cyan", no_wrap=True)
+    table.add_column("Model", style="green")
+    table.add_column("Title")
+    table.add_column("Match")
+    for r in results:
+        table.add_row(
+            r["id"],
+            r["model"],
+            r["title"] or "(untitled)",
+            r.get("snippet", ""),
+        )
+    console.print(table)
+
+
+@history_app.command(name="show")
+def history_show(
+    conversation_id: str = typer.Argument(..., help="Conversation ID (or prefix)"),
+):
+    """Display a conversation's messages."""
+    from ppmlx.history import get_history, ROLE_LABELS
+
+    hm = get_history()
+    resolved = hm.resolve_id(conversation_id)
+    if not resolved:
+        console.print(f"[red]Conversation not found: {conversation_id}[/red]")
+        raise typer.Exit(1)
+
+    conv = hm.get_conversation(resolved)
+    if not conv:
+        console.print(f"[red]Conversation not found: {resolved}[/red]")
+        raise typer.Exit(1)
+
+    msgs = hm.get_messages(resolved)
+    console.print(Panel(
+        f"[bold]{conv['title'] or 'Untitled'}[/bold]\n"
+        f"Model: {conv['model']}  |  {len(msgs)} messages  |  {conv['created_at'][:19]}",
+        title=f"Conversation {resolved}",
+    ))
+    _role_colors = {"user": "blue", "assistant": "green", "system": "yellow"}
+    for m in msgs:
+        color = _role_colors.get(m["role"], "white")
+        label = ROLE_LABELS.get(m["role"], m["role"].capitalize())
+        console.print(f"\n[bold {color}]{label}[/bold {color}]:")
+        console.print(m["content"])
+
+
+@history_app.command(name="resume")
+def history_resume(
+    conversation_id: str = typer.Argument(..., help="Conversation ID (or prefix)"),
+    max_kv_size: Optional[int] = typer.Option(None, "--max-kv-size", help="Max KV cache tokens"),
+    temperature: Optional[float] = typer.Option(None, "--temperature", "-t"),
+    max_tokens: Optional[int] = typer.Option(None, "--max-tokens"),
+):
+    """Resume an existing conversation in the chat REPL."""
+    from ppmlx.history import get_history
+
+    hm = get_history()
+    resolved = hm.resolve_id(conversation_id)
+    if not resolved:
+        console.print(f"[red]Conversation not found: {conversation_id}[/red]")
+        raise typer.Exit(1)
+
+    conv = hm.get_conversation(resolved)
+    if not conv:
+        console.print(f"[red]Conversation not found: {resolved}[/red]")
+        raise typer.Exit(1)
+
+    saved_msgs = hm.get_messages(resolved)
+    messages = [{"role": m["role"], "content": m["content"]} for m in saved_msgs]
+
+    model = conv["model"]
+    from ppmlx.models import get_model_path, download_model, resolve_alias, ModelNotFoundError
+    from ppmlx.memory import check_memory_warning
+
+    try:
+        repo_id = resolve_alias(model)
+    except ModelNotFoundError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+
+    local_path = get_model_path(repo_id)
+    if not local_path:
+        console.print(f"[yellow]Model not found locally. Downloading {model}...[/yellow]")
+        try:
+            local_path = download_model(model)
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Download cancelled.[/yellow]")
+            raise typer.Exit(1)
+        except Exception as e:
+            console.print(f"[red]Download failed: {e}[/red]")
+            raise typer.Exit(1)
+
+    warning = check_memory_warning(local_path)
+    if warning:
+        console.print(f"[yellow]{warning}[/yellow]")
+
+    console.print(f"[green]Resuming conversation [bold]{resolved}[/bold] with [bold]{model}[/bold] ({len(saved_msgs)} messages loaded)[/green]")
+    console.print(f"[dim]Title: {conv['title'] or '(untitled)'}[/dim]")
+
+    _run_repl(
+        model=model,
+        repo_id=repo_id,
+        local_path=local_path,
+        messages=messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        conversation_id=resolved,
+    )
+
+
+@history_app.command(name="export")
+def history_export(
+    conversation_id: str = typer.Argument(..., help="Conversation ID (or prefix)"),
+    fmt: str = typer.Option("md", "--format", "-f", help="Export format: md or json"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file (default: stdout)"),
+):
+    """Export a conversation as Markdown or JSON."""
+    from ppmlx.history import get_history
+
+    hm = get_history()
+    resolved = hm.resolve_id(conversation_id)
+    if not resolved:
+        console.print(f"[red]Conversation not found: {conversation_id}[/red]")
+        raise typer.Exit(1)
+
+    result = hm.export_conversation(resolved, fmt=fmt)
+    if result is None:
+        console.print(f"[red]Conversation not found or unsupported format: {fmt}[/red]")
+        raise typer.Exit(1)
+
+    if output:
+        Path(output).write_text(result)
+        console.print(f"[green]Exported to {output}[/green]")
+    else:
+        console.print(result)
+
+
+@history_app.command(name="delete")
+def history_delete(
+    conversation_id: str = typer.Argument(..., help="Conversation ID (or prefix)"),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
+):
+    """Delete a conversation."""
+    from ppmlx.history import get_history
+
+    hm = get_history()
+    resolved = hm.resolve_id(conversation_id)
+    if not resolved:
+        console.print(f"[red]Conversation not found: {conversation_id}[/red]")
+        raise typer.Exit(1)
+
+    conv = hm.get_conversation(resolved)
+    if not conv:
+        console.print(f"[red]Conversation not found: {resolved}[/red]")
+        raise typer.Exit(1)
+
+    if not force:
+        console.print(f"Delete conversation [cyan]{resolved}[/cyan]: {conv['title'] or '(untitled)'}?")
+        confirm = input("Type 'yes' to confirm: ")
+        if confirm.strip().lower() != "yes":
+            console.print("[dim]Cancelled.[/dim]")
+            return
+
+    hm.delete_conversation(resolved)
+    console.print(f"[green]Deleted conversation {resolved}.[/green]")
 
 
 if __name__ == "__main__":
