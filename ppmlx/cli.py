@@ -937,6 +937,19 @@ def serve(
 
 
 @app.command()
+def mcp(
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="Pre-load a model on startup"),
+):
+    """Start an MCP (Model Context Protocol) server on stdio.
+
+    Exposes local MLX models as tools for AI IDEs like Claude Code and Cursor.
+    """
+    from ppmlx.mcp import run_mcp
+
+    run_mcp(model=model)
+
+
+@app.command()
 def launch(
     action: Optional[str] = typer.Argument(None, help="Action: run, claude, codex, opencode, pi"),
     model: Optional[str] = typer.Option(None, "--model", "-m", help="Model name or alias"),

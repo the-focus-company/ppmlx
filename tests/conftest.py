@@ -20,6 +20,32 @@ for _p in [
     if _p not in sys.modules:
         _stub(_p)
 
+# Stub the mcp package if it's not installed (optional dependency).
+# We need mcp.server.fastmcp.FastMCP to be a class whose instances have
+# a .tool() decorator and a .run() method so ppmlx.mcp can be imported.
+try:
+    import mcp  # noqa: F401
+except ImportError:
+    _mcp_mod = _stub("mcp")
+    _mcp_server = _stub("mcp.server")
+    _mcp_fastmcp = _stub("mcp.server.fastmcp")
+
+    class _StubFastMCP:
+        """Minimal stand-in for mcp.server.fastmcp.FastMCP."""
+        def __init__(self, *a, **kw):
+            self._tools = {}
+
+        def tool(self, name=None, **kw):
+            def decorator(fn):
+                self._tools[name or fn.__name__] = fn
+                return fn
+            return decorator
+
+        def run(self, **kw):
+            pass
+
+    _mcp_fastmcp.FastMCP = _StubFastMCP  # type: ignore[attr-defined]
+
 # Pre-import real ppmlx modules so that test_cli.py / test_server.py cannot
 # replace them with MagicMock (both files guard injection with
 # `if mod not in sys.modules`, so pre-importing here wins).
@@ -34,6 +60,7 @@ import ppmlx.quantize      # noqa: E402
 import ppmlx.engine        # noqa: E402
 import ppmlx.engine_embed  # noqa: E402
 import ppmlx.engine_vlm    # noqa: E402
+import ppmlx.mcp           # noqa: E402
 
 # Snapshot real module attributes HERE (module level) — before any test file
 # is collected.  test_server.py's module-level code runs at collection time and
