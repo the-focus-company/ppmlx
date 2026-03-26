@@ -2033,5 +2033,122 @@ def registry(
     console.print(f"[dim]Disable:       set [registry] enabled = false in ~/.ppmlx/config.toml[/dim]")
 
 
+@app.command()
+def agent(
+    model: Optional[str] = typer.Argument(None, help="Model name or alias"),
+    prompt: Optional[str] = typer.Argument(None, help="Prompt for the agent"),
+    tools: Optional[str] = typer.Option(None, "--tools", help="Comma-separated list of tools to enable (default: all)"),
+    max_iterations: int = typer.Option(10, "--max-iterations", "-n", help="Max tool call rounds"),
+    sandbox: bool = typer.Option(False, "--sandbox", help="Restrict to read-only operations"),
+    system: Optional[str] = typer.Option(None, "--system", "-s", help="System prompt"),
+    temperature: Optional[float] = typer.Option(None, "--temperature", "-t"),
+    max_tokens: Optional[int] = typer.Option(None, "--max-tokens"),
+    working_dir: Optional[str] = typer.Option(None, "--working-dir", "-w", help="Working directory for tools"),
+):
+    """Run an agent loop that can execute tool calls."""
+    if not model:
+        model = _pick_model()
+    if not prompt:
+        console.print("[red]A prompt is required. Usage: ppmlx agent <model> \"your prompt\"[/red]")
+        raise typer.Exit(1)
+
+    from ppmlx.models import resolve_alias, get_model_path, download_model, ModelNotFoundError
+    from ppmlx.engine import get_engine
+    from ppmlx.memory import check_memory_warning
+    from ppmlx.agent import AgentConfig, AgentRuntime, AgentStep, BUILTIN_TOOL_NAMES
+    from rich.markdown import Markdown
+    from rich.panel import Panel
+
+    try:
+        repo_id = resolve_alias(model)
+    except ModelNotFoundError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+
+    local_path = get_model_path(repo_id)
+    if not local_path:
+        console.print(f"[yellow]Model not found locally. Downloading {model}...[/yellow]")
+        try:
+            local_path = download_model(model)
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Download cancelled.[/yellow]")
+            raise typer.Exit(1)
+        except Exception as e:
+            console.print(f"[red]Download failed: {e}[/red]")
+            raise typer.Exit(1)
+
+    warning = check_memory_warning(local_path)
+    if warning:
+        console.print(f"[yellow]{warning}[/yellow]")
+
+    # Parse enabled tools
+    enabled_tools: list[str] | None = None
+    if tools:
+        enabled_tools = [t.strip() for t in tools.split(",")]
+        invalid = set(enabled_tools) - BUILTIN_TOOL_NAMES
+        if invalid:
+            console.print(
+                f"[red]Unknown tools: {', '.join(invalid)}. "
+                f"Available: {', '.join(sorted(BUILTIN_TOOL_NAMES))}[/red]"
+            )
+            raise typer.Exit(1)
+
+    cwd = working_dir or os.getcwd()
+
+    config = AgentConfig(
+        model=repo_id,
+        max_iterations=max_iterations,
+        sandbox=sandbox,
+        working_dir=cwd,
+        enabled_tools=enabled_tools,
+        temperature=temperature if temperature is not None else 0.7,
+        max_tokens=max_tokens,
+    )
+
+    def on_step(step: AgentStep) -> None:
+        if step.tool_calls:
+            for i, tc in enumerate(step.tool_calls):
+                tr = step.tool_results[i] if i < len(step.tool_results) else None
+                console.print(
+                    Panel(
+                        f"[bold cyan]{tc['name']}[/bold cyan]({tc['arguments']})",
+                        title=f"[dim]Tool Call (iter {step.iteration + 1})[/dim]",
+                        border_style="cyan",
+                    )
+                )
+                if tr:
+                    style = "red" if tr.is_error else "green"
+                    output_preview = tr.output
+                    if len(output_preview) > 500:
+                        output_preview = output_preview[:500] + "\n... [truncated]"
+                    console.print(
+                        Panel(
+                            output_preview,
+                            title=f"[dim]Result[/dim]",
+                            border_style=style,
+                        )
+                    )
+        if not step.tool_calls and step.assistant_text:
+            console.print()
+            console.print(Markdown(step.assistant_text))
+
+    engine = get_engine()
+    runtime = AgentRuntime(config=config, engine=engine, on_step=on_step)
+
+    console.print(
+        f"[green]Agent running with [bold]{model}[/bold] "
+        f"(max {max_iterations} iterations, "
+        f"{'sandbox' if sandbox else 'full access'})[/green]\n"
+    )
+
+    try:
+        final_answer, steps = runtime.run(prompt=prompt, system_prompt=system)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Agent interrupted.[/yellow]")
+        raise typer.Exit(1)
+
+    console.print(f"\n[dim]Agent completed in {len(steps)} iteration(s).[/dim]")
+
+
 if __name__ == "__main__":
     app()
