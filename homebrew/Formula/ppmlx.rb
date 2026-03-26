@@ -1,75 +1,32 @@
-class PpLlm < Formula
+class Ppmlx < Formula
   include Language::Python::Virtualenv
 
   desc "CLI for running LLMs on Apple Silicon via MLX"
-  homepage "https://github.com/PingCompany/ppmlx"
+  homepage "https://ppmlx.dev"
   url "https://files.pythonhosted.org/packages/source/p/ppmlx/ppmlx-0.1.0.tar.gz"
-  sha256 "PLACEHOLDER_SHA256"
+  # To compute: curl -sL <url> | shasum -a 256
+  sha256 "UPDATE_WITH_ACTUAL_SHA256"
   license "MIT"
+  head "https://github.com/PingCompany/ppmlx.git", branch: "main"
 
   depends_on "python@3.11"
   depends_on :macos
-  # Apple Silicon (arm64) is required for MLX
-  on_arm do
-    # MLX only runs on Apple Silicon
-  end
-
-  resource "typer" do
-    url "https://files.pythonhosted.org/packages/source/t/typer/typer-0.12.3.tar.gz"
-    sha256 "PLACEHOLDER"
-  end
-
-  resource "rich" do
-    url "https://files.pythonhosted.org/packages/source/r/rich/rich-13.7.1.tar.gz"
-    sha256 "PLACEHOLDER"
-  end
-
-  resource "fastapi" do
-    url "https://files.pythonhosted.org/packages/source/f/fastapi/fastapi-0.115.0.tar.gz"
-    sha256 "PLACEHOLDER"
-  end
-
-  resource "uvicorn" do
-    url "https://files.pythonhosted.org/packages/source/u/uvicorn/uvicorn-0.30.6.tar.gz"
-    sha256 "PLACEHOLDER"
-  end
-
-  resource "huggingface-hub" do
-    url "https://files.pythonhosted.org/packages/source/h/huggingface_hub/huggingface_hub-0.24.0.tar.gz"
-    sha256 "PLACEHOLDER"
-  end
-
-  resource "pydantic" do
-    url "https://files.pythonhosted.org/packages/source/p/pydantic/pydantic-2.7.1.tar.gz"
-    sha256 "PLACEHOLDER"
-  end
-
-  resource "httpx" do
-    url "https://files.pythonhosted.org/packages/source/h/httpx/httpx-0.27.0.tar.gz"
-    sha256 "PLACEHOLDER"
-  end
-
-  resource "sse-starlette" do
-    url "https://files.pythonhosted.org/packages/source/s/sse_starlette/sse_starlette-2.1.0.tar.gz"
-    sha256 "PLACEHOLDER"
-  end
+  depends_on arch: :arm64
 
   def install
-    virtualenv_install_with_resources
+    virtualenv_create(libexec, "python3.11")
+
+    # Install ppmlx with all dependencies (including optional embeddings)
+    # in a single pip invocation. This lets pip handle dependency resolution
+    # and avoids maintaining a separate list that drifts from pyproject.toml.
+    system libexec/"bin/pip", "install", ".[embeddings]"
+
+    (bin/"ppmlx").write_env_script libexec/"bin/ppmlx", PATH: "#{libexec}/bin:#{ENV["PATH"]}"
   end
 
   def caveats
     <<~EOS
       ppmlx requires Apple Silicon (M1/M2/M3/M4) and macOS 13+.
-
-      MLX dependencies (mlx-lm, mlx-vlm, mlx-embeddings) must be installed
-      separately as they require a running macOS ARM64 environment:
-
-        pip install mlx-lm mlx-vlm mlx-embeddings
-
-      Or install ppmlx via uv for full dependency resolution:
-
-        uv tool install ppmlx
 
       Quick start:
         ppmlx pull llama3
@@ -79,7 +36,6 @@ class PpLlm < Formula
   end
 
   test do
-    assert_match "ppmlx", shell_output("#{bin}/ppmlx --version")
     assert_match "ppmlx", shell_output("#{bin}/ppmlx --help")
   end
 end

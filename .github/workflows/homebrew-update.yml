@@ -10,7 +10,56 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Homebrew tap update
+      - name: Checkout ppmlx repo
+        uses: actions/checkout@v4
+
+      - name: Get released version from tag
+        id: version
         run: |
-          echo "TODO: Update homebrew-ppmlx tap formula with new version"
-          echo "Steps: download sdist, run brew update-python-resources, update formula sha256"
+          # The Release workflow triggers on v* tags
+          TAG="${{ github.event.workflow_run.head_branch }}"
+          VERSION="${TAG#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Released version: ${VERSION}"
+
+      - name: Update formula with new version and SHA256
+        run: |
+          chmod +x homebrew/update_formula.sh
+          ./homebrew/update_formula.sh "${{ steps.version.outputs.version }}"
+
+      - name: Push updated formula to tap repo
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          TAP_REPO="PingCompany/homebrew-ppmlx"
+          VERSION="${{ steps.version.outputs.version }}"
+          BRANCH="update-ppmlx-${VERSION}"
+
+          # Clone the tap repo
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/${TAP_REPO}.git" /tmp/tap
+          cd /tmp/tap
+
+          # Create a branch for the update
+          git checkout -b "${BRANCH}"
+
+          # Copy the updated formula
+          mkdir -p Formula
+          cp "${GITHUB_WORKSPACE}/homebrew/Formula/ppmlx.rb" Formula/ppmlx.rb
+
+          # Commit and push
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/ppmlx.rb
+          git commit -m "Update ppmlx to ${VERSION}"
+          git push origin "${BRANCH}"
+
+          # Create a PR via the GitHub CLI
+          gh pr create \
+            --repo "${TAP_REPO}" \
+            --title "Update ppmlx to ${VERSION}" \
+            --body "Automated update from [ppmlx release v${VERSION}](https://github.com/PingCompany/ppmlx/releases/tag/v${VERSION})." \
+            --head "${BRANCH}" \
+            --base "main"
