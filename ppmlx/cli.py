@@ -1784,9 +1784,65 @@ def quantize(
 def create(
     name: str = typer.Argument(..., help="Name for the new model"),
     file: str = typer.Option("Modelfile", "-f", help="Path to Modelfile"),
+    list_all: bool = typer.Option(False, "--list", help="List all created model configs"),
+    show: bool = typer.Option(False, "--show", help="Show a model config"),
+    rm: bool = typer.Option(False, "--rm", help="Remove a model config"),
 ):
     """Create a custom model from a Modelfile."""
-    from ppmlx.modelfile import parse_modelfile, save_modelfile, ModelfileParseError
+    from ppmlx.modelfile import (
+        ModelfileParseError,
+        delete_modelfile,
+        list_modelfiles,
+        load_modelfile,
+        parse_modelfile,
+        save_modelfile,
+    )
+
+    if list_all:
+        names = list_modelfiles()
+        if not names:
+            console.print("[dim]No model configs found.[/dim]")
+            return
+        table = Table(title="Model Configs")
+        table.add_column("Name", style="cyan")
+        table.add_column("Base Model", style="green")
+        table.add_column("System Prompt", style="dim")
+        table.add_column("Adapter", style="yellow")
+        for n in names:
+            cfg = load_modelfile(n)
+            if cfg:
+                s = cfg.system or ""
+                sys_text = s[:40] + ("..." if len(s) > 40 else "")
+                table.add_row(n, cfg.from_model, sys_text, cfg.adapter or "")
+        console.print(table)
+        return
+
+    if show:
+        cfg = load_modelfile(name)
+        if cfg is None:
+            console.print(f"[red]Model config not found: {name}[/red]")
+            raise typer.Exit(1)
+        console.print(Panel(
+            f"[bold]FROM[/bold] {cfg.from_model}\n"
+            + (f"[bold]SYSTEM[/bold] {cfg.system}\n" if cfg.system else "")
+            + (f"[bold]TEMPLATE[/bold] {cfg.template}\n" if cfg.template else "")
+            + (f"[bold]ADAPTER[/bold] {cfg.adapter}\n" if cfg.adapter else "")
+            + (f"[bold]LICENSE[/bold] {cfg.license}\n" if cfg.license else "")
+            + "".join(
+                f"[bold]PARAMETER[/bold] {k} {v}\n"
+                for k, v in cfg.parameters.items()
+            ),
+            title=f"[cyan]{cfg.name}[/cyan]",
+        ))
+        return
+
+    if rm:
+        if delete_modelfile(name):
+            console.print(f"[green]Removed model config: [bold]{name}[/bold][/green]")
+        else:
+            console.print(f"[red]Model config not found: {name}[/red]")
+            raise typer.Exit(1)
+        return
 
     mf_path = Path(file)
     if not mf_path.exists():
@@ -1798,6 +1854,10 @@ def create(
         cfg = parse_modelfile(text, name=name)
         saved_path = save_modelfile(name, cfg)
         console.print(f"[green]Created model [bold]{name}[/bold] from {cfg.from_model}[/green]")
+        if cfg.adapter:
+            console.print(f"[dim]Adapter: {cfg.adapter}[/dim]")
+        if cfg.template:
+            console.print(f"[dim]Template override: yes[/dim]")
         console.print(f"[dim]Config saved: {saved_path}[/dim]")
     except ModelfileParseError as e:
         console.print(f"[red]Modelfile parse error: {e}[/red]")

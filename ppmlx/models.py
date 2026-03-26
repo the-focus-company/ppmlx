@@ -183,6 +183,15 @@ def resolve_alias(name: str) -> str:
     if name in reg:
         return reg[name]
 
+    # Check modelfile configs (~/.ppmlx/modelfiles/)
+    try:
+        from ppmlx.modelfile import load_modelfile
+        mf = load_modelfile(name)
+        if mf is not None and mf.from_model != name:
+            return resolve_alias(mf.from_model)
+    except ImportError:
+        pass
+
     # Prefix match across all alias sources
     all_a = {**reg, **DEFAULT_ALIASES, **user}
     matches = [(k, v) for k, v in all_a.items() if k.startswith(name + ":") or k == name]
