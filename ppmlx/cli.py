@@ -906,6 +906,7 @@ def serve(
         f"     GET  /v1/models\n"
         f"     GET  /health\n"
         f"     GET  /metrics\n"
+        f"     GET  /ui  (chat playground)\n"
         f"   SQLite log: ~/.ppmlx/ppmlx.db",
         title="ppmlx",
         border_style="green",
@@ -926,6 +927,55 @@ def serve(
 
     if _setproctitle_mod:
         _setproctitle_mod.setproctitle(f"ppmlx: server ({effective_host}:{effective_port})")
+
+    uvicorn.run(
+        "ppmlx.server:app",
+        host=effective_host,
+        port=effective_port,
+        log_level="info",
+        reload=False,
+    )
+
+
+@app.command()
+def ui(
+    host: Optional[str] = typer.Option(None, help="Bind host"),
+    port: Optional[int] = typer.Option(None, help="Bind port (default: 6767)"),
+    no_browser: bool = typer.Option(False, "--no-browser", help="Don't open a browser automatically"),
+):
+    """Open the web chat playground in a browser."""
+    import webbrowser
+    import uvicorn
+    from ppmlx.config import load_config
+    from ppmlx import __version__
+
+    overrides = {}
+    if host:
+        overrides["host"] = host
+    if port:
+        overrides["port"] = port
+    cfg = load_config(cli_overrides=overrides)
+
+    effective_host = host or cfg.server.host
+    effective_port = port or cfg.server.port
+
+    url = f"http://{effective_host}:{effective_port}/ui"
+
+    console.print(Panel(
+        f"[bold green]ppmlx playground v{__version__}[/bold green]\n"
+        f"   Opening [link]{url}[/link] in your browser...\n"
+        f"   Press Ctrl+C to stop the server.",
+        title="ppmlx",
+        border_style="green",
+    ))
+
+    if _setproctitle_mod:
+        _setproctitle_mod.setproctitle(f"ppmlx: playground ({effective_host}:{effective_port})")
+
+    if not no_browser:
+        # Open browser after a brief delay to let the server start
+        import threading
+        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
 
     uvicorn.run(
         "ppmlx.server:app",

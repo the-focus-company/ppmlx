@@ -69,6 +69,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Playground (web chat UI) ─────────────────────────────────────────
+from ppmlx.playground import router as playground_router
+app.include_router(playground_router)
+
 
 async def _snapshot_loop(interval_seconds: int) -> None:
     """Periodically log system snapshots to the database."""
