@@ -40,12 +40,18 @@ class RegistryConfig:
 
 
 @dataclass
+class ToolAwarenessConfig:
+    mode: str = "no_tools_only"
+
+
+@dataclass
 class Config:
     server: ServerConfig = field(default_factory=ServerConfig)
     defaults: DefaultsConfig = field(default_factory=DefaultsConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     registry: RegistryConfig = field(default_factory=RegistryConfig)
+    tool_awareness: ToolAwarenessConfig = field(default_factory=ToolAwarenessConfig)
 
 
 def get_ppmlx_dir() -> Path:
@@ -57,6 +63,22 @@ def get_ppmlx_dir() -> Path:
 
 def _parse_bool(v: str) -> bool:
     return v.lower() not in ("0", "false", "no")
+
+
+def _normalize_tool_awareness_mode(value: Any) -> str:
+    raw = str(value).strip().lower()
+    aliases = {
+        "0": "off",
+        "false": "off",
+        "no": "off",
+        "off": "off",
+        "1": "all",
+        "true": "all",
+        "yes": "all",
+        "all": "all",
+        "no_tools_only": "no_tools_only",
+    }
+    return aliases.get(raw, "no_tools_only")
 
 
 def load_config(cli_overrides: dict[str, Any] | None = None) -> Config:
@@ -100,6 +122,10 @@ def _apply_toml(cfg: Config, data: dict) -> None:
     if "registry" in data:
         r = data["registry"]
         if "enabled" in r: cfg.registry.enabled = bool(r["enabled"])
+    if "tool_awareness" in data:
+        ta = data["tool_awareness"]
+        if "mode" in ta:
+            cfg.tool_awareness.mode = _normalize_tool_awareness_mode(ta["mode"])
 
 
 def _apply_env(cfg: Config) -> None:
@@ -117,6 +143,7 @@ def _apply_env(cfg: Config) -> None:
         "PPMLX_LOG_SNAPSHOT_INTERVAL": ("logging", "snapshot_interval_seconds", int),
         "PPMLX_MEMORY_WIRED_LIMIT": ("memory", "wired_limit_mb", int),
         "PPMLX_REGISTRY_ENABLED": ("registry", "enabled", _parse_bool),
+        "PPMLX_INJECT_TOOL_AWARENESS": ("tool_awareness", "mode", _normalize_tool_awareness_mode),
     }
     for env_key, (section, attr, coerce) in mapping.items():
         val = os.environ.get(env_key)
