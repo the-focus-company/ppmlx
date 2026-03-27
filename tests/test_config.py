@@ -9,6 +9,7 @@ from ppmlx.config import (
     LoggingConfig,
     MemoryConfig,
     ServerConfig,
+    ToolAwarenessConfig,
     get_ppmlx_dir,
     load_config,
 )
@@ -45,6 +46,11 @@ class TestDefaultValues:
         assert cfg.server.host == "127.0.0.1"
         assert cfg.server.cors is True
         assert cfg.server.max_loaded_models == 2
+        assert cfg.tool_awareness.mode == "no_tools_only"
+
+    def test_tool_awareness_defaults(self):
+        cfg = ToolAwarenessConfig()
+        assert cfg.mode == "no_tools_only"
 
 
 class TestLoadConfigDefaults:
@@ -57,6 +63,7 @@ class TestLoadConfigDefaults:
         assert cfg.defaults.model == "qwen3.5:0.8b"
         assert cfg.defaults.temperature == 0.7
         assert cfg.defaults.max_tokens == 2048
+        assert cfg.tool_awareness.mode == "no_tools_only"
 
 
 class TestTomlLoading:
@@ -83,6 +90,9 @@ snapshot_interval_seconds = 120
 
 [memory]
 wired_limit_mb = 1024
+
+[tool_awareness]
+mode = "all"
 """
         (config_dir / "config.toml").write_text(toml_content)
         cfg = load_config()
@@ -98,6 +108,7 @@ wired_limit_mb = 1024
         assert cfg.logging.enabled is False
         assert cfg.logging.snapshot_interval_seconds == 120
         assert cfg.memory.wired_limit_mb == 1024
+        assert cfg.tool_awareness.mode == "all"
 
     def test_partial_toml(self, tmp_home):
         config_dir = tmp_home / ".ppmlx"
@@ -185,6 +196,21 @@ class TestEnvVarOverrides:
         monkeypatch.setenv("PPMLX_PORT", "not_a_number")
         cfg = load_config()
         assert cfg.server.port == 6767
+
+    def test_tool_awareness_env_var(self, tmp_home, monkeypatch):
+        monkeypatch.setenv("PPMLX_INJECT_TOOL_AWARENESS", "all")
+        cfg = load_config()
+        assert cfg.tool_awareness.mode == "all"
+
+    def test_tool_awareness_env_var_legacy_true_maps_to_all(self, tmp_home, monkeypatch):
+        monkeypatch.setenv("PPMLX_INJECT_TOOL_AWARENESS", "true")
+        cfg = load_config()
+        assert cfg.tool_awareness.mode == "all"
+
+    def test_tool_awareness_env_var_legacy_false_maps_to_off(self, tmp_home, monkeypatch):
+        monkeypatch.setenv("PPMLX_INJECT_TOOL_AWARENESS", "false")
+        cfg = load_config()
+        assert cfg.tool_awareness.mode == "off"
 
 
 class TestCliOverrides:

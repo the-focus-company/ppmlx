@@ -1665,9 +1665,17 @@ def config_cmd(
     """View or interactively set ppmlx configuration (HF token, defaults, etc.)."""
     import tomllib
     import tomli_w  # type: ignore[import]
-    from ppmlx.config import get_ppmlx_dir
+    import questionary
+    from ppmlx.config import get_ppmlx_dir, load_config
 
     cfg_path = get_ppmlx_dir() / "config.toml"
+    cfg = load_config()
+    current_mode = getattr(getattr(cfg, "tool_awareness", None), "mode", "no_tools_only")
+    mode_meta = {
+        "off": ("Off", "Never inject tool-awareness hints."),
+        "no_tools_only": ("No Tools Only", "Inject only when the request has no tools."),
+        "all": ("All Requests", "Inject for requests with and without tools."),
+    }
 
     # Load existing config
     try:
@@ -1692,20 +1700,46 @@ def config_cmd(
     current_token = data.get("auth", {}).get("hf_token") or os.environ.get("HF_TOKEN", "")
     masked = ("*" * (len(current_token) - 4) + current_token[-4:]) if len(current_token) > 4 else ("(not set)" if not current_token else current_token)
     console.print(f"  HuggingFace token: [dim]{masked}[/dim]")
+    console.print(f"  Tool awareness: [dim]{mode_meta.get(current_mode, ('No Tools Only', ''))[0]}[/dim]")
     console.print()
 
     new_token = pt_prompt(
         ANSI("\033[1mNew HF token\033[0m (leave blank to keep current, 'clear' to remove): "),
     ).strip()
 
+    changed = False
     if new_token == "clear":
         data.setdefault("auth", {}).pop("hf_token", None)
         console.print("[dim]Token cleared.[/dim]")
+        changed = True
     elif new_token:
         data.setdefault("auth", {})["hf_token"] = new_token
         console.print("[green]Token saved.[/green]")
+        changed = True
     else:
         console.print("[dim]No change.[/dim]")
+
+    selected_mode = questionary.select(
+        "Inject tool awareness into /v1/chat/completions?",
+        choices=[
+            questionary.Choice(f"{label:<14} {desc}", value=value)
+            for value, (label, desc) in mode_meta.items()
+        ],
+        default=current_mode,
+    ).ask()
+
+    if selected_mode is None:
+        raise typer.Exit()
+
+    if selected_mode != current_mode:
+        data.setdefault("tool_awareness", {})["mode"] = selected_mode
+        console.print(f"[green]Tool awareness set to {selected_mode}.[/green]")
+        changed = True
+    else:
+        console.print("[dim]Tool awareness unchanged.[/dim]")
+
+    if not changed:
+        console.print("[dim]No config changes to write.[/dim]")
         return
 
     try:

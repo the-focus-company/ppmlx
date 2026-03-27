@@ -148,6 +148,63 @@ def _merge_system_messages(messages: list[dict]) -> list[dict]:
     return merged
 
 
+def _inject_tool_awareness(messages: list[dict], tools: list[dict] | None) -> list[dict]:
+    """Prepend a short system hint so the model knows which tools it has.
+
+    Without this, thinking models (Qwen3, GLM-4) hallucinate tool usage
+    and burn thousands of tokens reasoning about tools that don't exist.
+    With the hint they answer immediately: "I don't have that tool."
+    """
+    try:
+        from ppmlx.config import load_config
+        cfg = load_config()
+        mode = getattr(getattr(cfg, "tool_awareness", None), "mode", "no_tools_only")
+    except Exception:
+        mode = "no_tools_only"
+
+    mode = str(mode).strip().lower()
+    if mode in {"0", "false", "no", "off"}:
+        return messages
+    if mode in {"1", "true", "yes"}:
+        mode = "all"
+    elif mode not in {"all", "no_tools_only"}:
+        mode = "no_tools_only"
+
+    if tools and mode == "no_tools_only":
+        return messages
+
+    if tools:
+        names = sorted({
+            t.get("function", {}).get("name") or t.get("name", "")
+            for t in tools
+        } - {""})
+        hint = (
+            "You have access ONLY to these tools: "
+            + ", ".join(names)
+            + ". If the user asks you to use a tool not in this list, "
+            "tell them it is not available. Do not hallucinate tool calls."
+        )
+    else:
+        hint = (
+            "You do not have access to any external tools "
+            "(no web search, no file access, no code execution, etc.). "
+            "If the user asks you to use a tool or search the web, "
+            "briefly inform them that this capability is not available. "
+            "Do not simulate or hallucinate tool usage."
+        )
+
+    # Append to existing system message or create one
+    if messages and messages[0].get("role") == "system":
+        messages = list(messages)
+        messages[0] = {
+            **messages[0],
+            "content": messages[0].get("content", "") + "\n\n" + hint,
+        }
+    else:
+        messages = [{"role": "system", "content": hint}] + list(messages)
+    return messages
+
+
 # ── Tool-call parsing ───────────────────────────────────────────────────
 
 _TOOL_CALL_FALLBACK_RE = re.compile(r"<tool_call>(.*?)</tool_call>", re.DOTALL)
@@ -481,6 +538,7 @@ async def chat_completions(request: Request):
     if tools:
         messages = _normalize_tool_messages(messages)
     messages = _merge_system_messages(messages)
+    messages = _inject_tool_awareness(messages, tools)
     stream = body.get("stream", False)
     temperature = body.get("temperature", 0.7)
     top_p = body.get("top_p", 1.0)

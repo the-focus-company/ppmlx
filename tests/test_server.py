@@ -1,6 +1,7 @@
 """Tests for ppmlx.server — FastAPI OpenAI-compatible API."""
 from __future__ import annotations
 import sys
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 # Mock all ppmlx modules that server.py tries to import lazily
@@ -45,7 +46,8 @@ sys.modules["ppmlx.memory"].get_system_ram_gb = MagicMock(return_value=16.0)
 
 # Set up mock config
 mock_config = MagicMock()
-mock_config.logging.snapshot_interval_seconds = 60
+mock_config.logging = SimpleNamespace(snapshot_interval_seconds=60)
+mock_config.tool_awareness = SimpleNamespace(mode="no_tools_only")
 sys.modules["ppmlx.config"].load_config = MagicMock(return_value=mock_config)
 
 import pytest
@@ -96,6 +98,7 @@ def test_chat_completion_nonstreaming(client):
     # Reset engine mock to return fresh values
     mock_engine.generate.return_value = ("Hello!", None, 10, 5)
     sys.modules["ppmlx.engine"].get_engine = MagicMock(return_value=mock_engine)
+    mock_config.tool_awareness.mode = "no_tools_only"
 
     response = client.post("/v1/chat/completions", json={
         "model": "test-model",
@@ -116,6 +119,7 @@ def test_chat_completion_streaming_format(client):
         return iter(["Hello", " ", "world"])
     mock_engine.stream_generate = fresh_stream
     sys.modules["ppmlx.engine"].get_engine = MagicMock(return_value=mock_engine)
+    mock_config.tool_awareness.mode = "no_tools_only"
 
     response = client.post("/v1/chat/completions", json={
         "model": "test-model",
@@ -192,6 +196,62 @@ def test_cors_headers_present(client):
     # CORS middleware sets Access-Control-Allow-Origin on actual requests too
     response2 = client.get("/health", headers={"Origin": "http://localhost:3000"})
     assert "access-control-allow-origin" in response2.headers
+
+
+def test_chat_completion_injects_tool_awareness_without_tools(client):
+    mock_engine.generate.return_value = ("Hello!", None, 10, 5)
+    mock_engine.generate.reset_mock()
+    sys.modules["ppmlx.engine"].get_engine = MagicMock(return_value=mock_engine)
+    mock_config.tool_awareness.mode = "no_tools_only"
+
+    response = client.post("/v1/chat/completions", json={
+        "model": "test-model",
+        "messages": [{"role": "user", "content": "Hi"}],
+        "stream": False,
+    })
+
+    assert response.status_code == 200
+    sent_messages = mock_engine.generate.call_args.args[1]
+    assert sent_messages[0]["role"] == "system"
+    assert "You do not have access to any external tools" in sent_messages[0]["content"]
+
+
+def test_chat_completion_skips_tool_awareness_for_tools_in_no_tools_only_mode(client):
+    mock_engine.generate.return_value = ("Hello!", None, 10, 5)
+    mock_engine.generate.reset_mock()
+    sys.modules["ppmlx.engine"].get_engine = MagicMock(return_value=mock_engine)
+    mock_config.tool_awareness.mode = "no_tools_only"
+
+    response = client.post("/v1/chat/completions", json={
+        "model": "test-model",
+        "messages": [{"role": "user", "content": "Hi"}],
+        "tools": [{
+            "type": "function",
+            "function": {
+                "name": "bash",
+                "description": "Run shell commands",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        }],
+        "stream": False,
+    })
+
+    assert response.status_code == 200
+    sent_messages = mock_engine.generate.call_args.args[1]
+    system_content = sent_messages[0]["content"] if sent_messages and sent_messages[0]["role"] == "system" else ""
+    assert "You have access ONLY to these tools" not in system_content
+
+
+def test_inject_tool_awareness_returns_messages_unchanged_when_disabled(monkeypatch):
+    from ppmlx.server import _inject_tool_awareness
+    from ppmlx import config as config_module
+    monkeypatch.setattr(
+        config_module,
+        "load_config",
+        lambda: SimpleNamespace(tool_awareness=SimpleNamespace(mode="off")),
+    )
+    messages = [{"role": "user", "content": "Hi"}]
+    assert _inject_tool_awareness(messages, None) == messages
 
 
 # ---------------------------------------------------------------------------
