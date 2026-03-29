@@ -21,13 +21,13 @@ jobs:
           VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Download sdist and compute SHA256
+      - name: Get sdist URL and SHA256 from PyPI
         id: sha
         run: |
           VERSION=${{ steps.version.outputs.version }}
-          URL="https://files.pythonhosted.org/packages/source/p/ppmlx/ppmlx-${VERSION}.tar.gz"
-          curl -sSfL "$URL" -o ppmlx.tar.gz
-          SHA=$(shasum -a 256 ppmlx.tar.gz | awk '{print $1}')
+          JSON=$(curl -sSf "https://pypi.org/pypi/ppmlx/${VERSION}/json")
+          URL=$(echo "$JSON" | python3 -c "import sys,json; [print(u['url']) for u in json.load(sys.stdin)['urls'] if u['filename'].endswith('.tar.gz')]")
+          SHA=$(echo "$JSON" | python3 -c "import sys,json; [print(u['digests']['sha256']) for u in json.load(sys.stdin)['urls'] if u['filename'].endswith('.tar.gz')]")
           echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
           echo "url=$URL" >> "$GITHUB_OUTPUT"
 
