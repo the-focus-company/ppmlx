@@ -51,6 +51,8 @@ class ChatCompletionRequest(BaseModel):
     stop: str | list[str] | None = None
     seed: int | None = None
     repetition_penalty: float | None = Field(default=None, ge=0.0, le=2.0)  # ppmlx extension
+    think: bool | None = None  # ppmlx extension: force enable/disable thinking
+    reasoning_budget: int | None = Field(default=None, ge=1, le=131072)  # ppmlx extension: max reasoning tokens
 
     @field_validator("messages")
     @classmethod
@@ -62,10 +64,15 @@ class ChatCompletionRequest(BaseModel):
 
 # ── Chat completion response ────────────────────────────────────────────
 
+class CompletionTokensDetails(BaseModel):
+    reasoning_tokens: int = 0
+
+
 class Usage(BaseModel):
     prompt_tokens: int
     completion_tokens: int
     total_tokens: int
+    completion_tokens_details: CompletionTokensDetails | None = None
 
 
 class ChatCompletionChoice(BaseModel):
@@ -120,6 +127,8 @@ class CompletionRequest(BaseModel):
     stop: str | list[str] | None = None
     seed: int | None = None
     repetition_penalty: float | None = Field(default=None, ge=0.0, le=2.0)
+    think: bool | None = None  # ppmlx extension: force enable/disable thinking
+    reasoning_budget: int | None = Field(default=None, ge=1, le=131072)  # ppmlx extension: max reasoning tokens
 
 
 class CompletionChoice(BaseModel):
