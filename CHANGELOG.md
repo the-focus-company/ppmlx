@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-03-30
+
+### Added
+- Thinking/reasoning model support: `think` and `reasoning_budget` API parameters
+- `reasoning_effort` mapping (low/medium/high) to reasoning budget tokens
+- Thinking metrics tracking in SQLite DB with migration
+- Streaming thinking/reasoning delta support in chat completions
+- Empty-answer retry logic for thinking models in engine
+- `ppmlx logs` and `ppmlx stats` CLI commands for log analysis
+- `ppmlx config --thinking`, `--reasoning-budget`, `--effort-base`, `--max-tools-tokens` flags
+- `[thinking]` section in config (`enabled`, `default_reasoning_budget`, `effort_base`)
+- Thinking configuration panel in TUI
+
 ## [0.3.0] - 2026-03-28
 
 ### Added
