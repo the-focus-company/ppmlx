@@ -54,8 +54,8 @@ async def test_batch_generate_returns_result():
         "some/model", [{"role": "user", "content": "hi"}]
     )
     assert isinstance(result, tuple)
-    assert len(result) == 4
-    text, reasoning, pt, ct = result
+    assert len(result) >= 4
+    text, reasoning, pt, ct = result[:4]
     assert isinstance(text, str)
     assert text == "Hello there!"
 
@@ -115,10 +115,10 @@ async def test_batch_concurrent_generates():
 
     results = await asyncio.gather(*tasks)
     assert len(results) == 3
-    # Each should have returned a valid 4-tuple
+    # Each should have returned a valid result tuple (4 or 5 fields)
     for r in results:
         assert isinstance(r, tuple)
-        assert len(r) == 4
+        assert len(r) >= 4
 
     await engine.shutdown()
 
