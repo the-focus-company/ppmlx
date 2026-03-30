@@ -385,7 +385,8 @@ def test_nonstream_chat_think_false(client):
 
 
 def test_nonstream_chat_think_default_with_tools(client):
-    """Without think param but with tools, enable_thinking defaults to False."""
+    """With tools and a reasoning_budget from config, thinking stays enabled.
+    Without budget, tools disable thinking."""
     mock_engine.generate.return_value = ("Hello!", None, 10, 5)
     mock_engine.generate.reset_mock()
     sys.modules["ppmlx.engine"].get_engine = MagicMock(return_value=mock_engine)
@@ -406,7 +407,8 @@ def test_nonstream_chat_think_default_with_tools(client):
     })
     assert response.status_code == 200
     call_kwargs = mock_engine.generate.call_args.kwargs
-    assert call_kwargs["enable_thinking"] is False
+    # With config default_reasoning_budget > 0, thinking is enabled even with tools
+    assert call_kwargs["enable_thinking"] is True
 
 
 def test_nonstream_chat_completion_tokens_details(client):

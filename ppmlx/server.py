@@ -9,6 +9,11 @@ import uuid
 from contextlib import asynccontextmanager
 
 log = logging.getLogger("ppmlx.server")
+log.setLevel(logging.INFO)
+if not log.handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(levelname)s:     %(message)s"))
+    log.addHandler(_h)
 
 from fastapi import FastAPI, Request, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -337,8 +342,18 @@ _CORE_TOOL_NAMES = {
 # Maximum estimated tokens for all tools combined.  Large tool lists
 # (Codex sends 66) cause extremely slow prefill on local models
 # (e.g. 50s+ for ~20k tool tokens on a 9b model), which makes
-# clients timeout.  Keeping the budget small ensures fast first-token.
-_MAX_TOOLS_TOKENS = 3000
+# clients timeout.  Default 12000 keeps all tools for most clients.
+# Set to 0 in config to disable limiting.
+_MAX_TOOLS_TOKENS = 12000
+
+
+def _get_max_tools_tokens() -> int:
+    try:
+        from ppmlx.config import load_config
+        cfg = load_config()
+        return cfg.server.max_tools_tokens
+    except Exception:
+        return _MAX_TOOLS_TOKENS
 
 
 def _limit_tools(tools: list[dict] | None) -> list[dict] | None:
@@ -348,9 +363,12 @@ def _limit_tools(tools: list[dict] | None) -> list[dict] | None:
     """
     if not tools:
         return tools
-    # Estimate tokens per tool (~4 chars per token)
-    total = sum(len(json.dumps(t)) for t in tools) // 4
-    if total <= _MAX_TOOLS_TOKENS:
+    max_tokens = _get_max_tools_tokens()
+    if max_tokens <= 0:
+        return tools  # limiting disabled
+    # Estimate tokens per tool (~6 chars per token for structured JSON)
+    total = sum(len(json.dumps(t)) for t in tools) // 6
+    if total <= max_tokens:
         return tools
 
     # Filter out non-function tools (e.g. web_search with name=None)
@@ -368,9 +386,9 @@ def _limit_tools(tools: list[dict] | None) -> list[dict] | None:
 
     # Start with core, add extras until budget reached
     result = list(core)
-    budget = _MAX_TOOLS_TOKENS - sum(len(json.dumps(t)) for t in result) // 4
+    budget = max_tokens - sum(len(json.dumps(t)) for t in result) // 6
     for t in extra:
-        cost = len(json.dumps(t)) // 4
+        cost = len(json.dumps(t)) // 6
         if cost <= budget:
             result.append(t)
             budget -= cost
@@ -428,6 +446,25 @@ def _normalize_tool_messages(messages: list[dict]) -> list[dict]:
 
 
 # ── Endpoints ───────────────────────────────────────────────────────────
+
+@app.get("/")
+@app.head("/")
+async def root():
+    return {"status": "ok"}
+
+
+@app.post("/v1/messages/count_tokens")
+async def count_tokens(request: Request):
+    """Estimate token count for a messages request (used by Claude Code)."""
+    body = await request.json()
+    messages = body.get("messages", [])
+    system = body.get("system", "")
+    tools = body.get("tools", [])
+    # Rough estimate: ~4 chars per token
+    total_chars = len(json.dumps(messages)) + len(json.dumps(system)) + len(json.dumps(tools))
+    input_tokens = total_chars // 4
+    return {"input_tokens": input_tokens}
+
 
 @app.get("/health")
 async def health(request: Request):
@@ -558,6 +595,28 @@ async def chat_completions(request: Request):
     repetition_penalty = body.get("repetition_penalty")
     think = body.get("think")
     reasoning_budget = body.get("reasoning_budget")
+
+    # Load config for thinking defaults
+    try:
+        from ppmlx.config import load_config
+        _cfg = load_config()
+    except Exception:
+        _cfg = None
+
+    # Map OpenAI reasoning_effort ("low"/"medium"/"high") to reasoning_budget
+    reasoning_effort = body.get("reasoning_effort")
+    if reasoning_effort and reasoning_budget is None and _cfg:
+        reasoning_budget = _cfg.thinking.effort_to_budget(str(reasoning_effort))
+    if reasoning_effort and think is None:
+        think = str(reasoning_effort).lower() != "none"
+
+    # Apply config defaults when client doesn't specify
+    if _cfg:
+        if reasoning_budget is None and _cfg.thinking.default_reasoning_budget > 0:
+            reasoning_budget = _cfg.thinking.default_reasoning_budget
+        if think is None and not _cfg.thinking.enabled:
+            think = False
+
     _track_usage(
         "api_chat_completions",
         {
@@ -572,6 +631,12 @@ async def chat_completions(request: Request):
         repo_id = resolve_alias(model_name)
     except Exception:
         repo_id = model_name
+
+    log.info(
+        "POST /v1/chat/completions model=%s think=%s budget=%s effort=%s stream=%s tools=%d",
+        repo_id, think, reasoning_budget, reasoning_effort, stream,
+        len(tools) if tools else 0,
+    )
 
     has_imgs = _has_images(messages)
     engine_type = _route_engine(repo_id, has_imgs)
@@ -649,7 +714,7 @@ def _stream_chat(
                 # Determine whether to enable thinking
                 if think is not None:
                     enable_thinking = think
-                elif tools:
+                elif tools and not reasoning_budget:
                     enable_thinking = False
                 else:
                     enable_thinking = True
@@ -741,11 +806,24 @@ def _stream_chat(
                 elif enable_thinking and not tools:
                     # No tools, thinking enabled — parse <think> tags
                     # and emit reasoning vs content deltas.
-                    # Qwen3 templates inject <think> so model output
-                    # typically starts inside a thinking block.
-                    inside_think = True
+                    inside_think = False
                     buf = ""
-                    thinking_start_ts = time.time()
+                    thinking_start_ts = None
+                    budget_exceeded = False
+                    has_content = False  # Track if any content was emitted
+
+                    # Detect template-injected thinking (Qwen3, DeepSeek-R1)
+                    try:
+                        lm = engine._get_or_load(repo_id)
+                        prompt = engine._apply_chat_template(lm, messages, enable_thinking=True)
+                        if re.search(r"<think>\s*$", prompt):
+                            inside_think = True
+                            thinking_start_ts = time.time()
+                    except Exception:
+                        pass
+
+                    # Reasoning budget: chars threshold (rough 4 chars/token estimate)
+                    _budget_chars = reasoning_budget * 4 if reasoning_budget else 0
 
                     async for chunk in _async_iter_sync_gen(gen):
                         if not chunk:
@@ -758,6 +836,20 @@ def _stream_chat(
 
                         while buf:
                             if inside_think:
+                                # Budget exceeded — force end of thinking,
+                                # emit remaining buffer as content
+                                if _budget_chars and reasoning_chars_count >= _budget_chars:
+                                    inside_think = False
+                                    budget_exceeded = True
+                                    if thinking_start_ts:
+                                        thinking_duration_ms = (time.time() - thinking_start_ts) * 1000
+                                    # Strip any leftover think tags from buffer
+                                    buf = buf.replace("</think>", "").replace("<think>", "")
+                                    if buf:
+                                        has_content = True
+                                        yield _make_chunk_sse(_delta("content", buf))
+                                    buf = ""
+                                    break
                                 # Strip leading <think> tag (engine may emit
                                 # it even though template already injected one)
                                 if buf.startswith("<think>"):
@@ -787,14 +879,25 @@ def _stream_chat(
                                     yield _make_chunk_sse(_delta("reasoning", safe))
                                 break
                             else:
+                                if budget_exceeded:
+                                    # After budget exceeded, strip any think
+                                    # tags and emit everything as content
+                                    buf = buf.replace("<think>", "").replace("</think>", "")
+                                    if buf:
+                                        has_content = True
+                                        yield _make_chunk_sse(_delta("content", buf))
+                                    buf = ""
+                                    break
                                 start_idx = buf.find("<think>")
                                 if start_idx != -1:
                                     before = buf[:start_idx]
                                     if before:
+                                        has_content = True
                                         yield _make_chunk_sse(_delta("content", before))
                                     buf = buf[start_idx + len("<think>"):]
                                     inside_think = True
-                                    thinking_start_ts = time.time()
+                                    if not thinking_start_ts:
+                                        thinking_start_ts = time.time()
                                     continue
                                 # Check for partial <think> tag at end
                                 keep = 0
@@ -808,6 +911,7 @@ def _stream_chat(
                                     safe = buf
                                     buf = ""
                                 if safe:
+                                    has_content = True
                                     yield _make_chunk_sse(_delta("content", safe))
                                 break
 
@@ -816,7 +920,19 @@ def _stream_chat(
                         key = "reasoning" if inside_think else "content"
                         if inside_think:
                             reasoning_chars_count += len(buf)
+                        else:
+                            has_content = True
                         yield _make_chunk_sse(_delta(key, buf))
+
+                    # Fallback: if model produced only reasoning with no
+                    # content, re-emit reasoning as content so the client
+                    # has something to show.
+                    if not has_content and reasoning_chars_count > 0:
+                        log.warning("Model produced only reasoning, no content — "
+                                    "emitting reasoning as content fallback")
+                        yield _make_chunk_sse(_delta("content",
+                            "[Model produced only reasoning. "
+                            "Retry with think=false or lower reasoning_budget.]"))
                 else:
                     # No tools, thinking disabled — stream directly
                     async for chunk in _async_iter_sync_gen(gen):
@@ -909,9 +1025,10 @@ async def _nonstream_chat(
 ):
     """Return non-streaming JSON response."""
     # Determine thinking mode: explicit param > tool heuristic > default on
+    # When a reasoning_budget is set, allow thinking even with tools.
     if think is not None:
         enable_thinking = think
-    elif tools:
+    elif tools and not reasoning_budget:
         enable_thinking = False
     else:
         enable_thinking = True
@@ -932,13 +1049,13 @@ async def _nonstream_chat(
             if reasoning_budget is not None:
                 gen_kwargs["reasoning_budget"] = reasoning_budget
             try:
-                text, reasoning, prompt_tokens, completion_tokens = engine.generate(
+                text, reasoning, prompt_tokens, completion_tokens, *_ = engine.generate(
                     repo_id, messages, **gen_kwargs,
                 )
             except TypeError:
                 # reasoning_budget not yet supported in engine; retry without it
                 gen_kwargs.pop("reasoning_budget", None)
-                text, reasoning, prompt_tokens, completion_tokens = engine.generate(
+                text, reasoning, prompt_tokens, completion_tokens, *_ = engine.generate(
                     repo_id, messages, **gen_kwargs,
                 )
         elif engine_type == "vision":
@@ -1059,7 +1176,7 @@ async def completions(request: Request):
     try:
         from ppmlx.engine import get_engine
         engine = get_engine()
-        text, reasoning, prompt_tokens, completion_tokens = engine.generate(
+        text, reasoning, prompt_tokens, completion_tokens, *_ = engine.generate(
             repo_id, messages,
             temperature=0.7 if temperature is None else temperature,
             max_tokens=max_tokens,
@@ -1598,7 +1715,7 @@ async def _nonstream_responses(
         if engine_type == "text":
             from ppmlx.engine import get_engine
             engine = get_engine()
-            text, reasoning, prompt_tokens, completion_tokens = engine.generate(
+            text, reasoning, prompt_tokens, completion_tokens, *_ = engine.generate(
                 repo_id, messages,
                 temperature=0.7 if temperature is None else temperature,
                 top_p=1.0 if top_p is None else top_p,
@@ -1696,6 +1813,47 @@ async def anthropic_messages(request: Request):
     system_prompt = body.get("system")
     tools = _limit_tools(body.get("tools") or None)
 
+    # Thinking control — Anthropic API uses "thinking" object or budget param
+    thinking_cfg = body.get("thinking") or {}
+    log.info("POST /v1/messages raw thinking=%s reasoning_effort=%s",
+             body.get("thinking"), body.get("reasoning_effort"))
+    think_enabled = None
+    budget_tokens = None
+    if isinstance(thinking_cfg, dict):
+        thinking_type = thinking_cfg.get("type")
+        if thinking_type == "enabled":
+            think_enabled = True
+            budget_tokens = thinking_cfg.get("budget_tokens")
+        elif thinking_type == "disabled":
+            think_enabled = False
+        elif thinking_type == "adaptive":
+            think_enabled = True
+            # adaptive = let model decide, use config budget
+        # Legacy format fallback
+        if think_enabled is None and "enabled" in thinking_cfg:
+            think_enabled = thinking_cfg["enabled"]
+        if budget_tokens is None and "budget_tokens" in thinking_cfg:
+            budget_tokens = thinking_cfg["budget_tokens"]
+
+    # Load config for thinking defaults
+    try:
+        from ppmlx.config import load_config
+        _cfg = load_config()
+    except Exception:
+        _cfg = None
+
+    # Also check reasoning_effort (OpenAI-style, some clients send it)
+    reasoning_effort = body.get("reasoning_effort")
+    if reasoning_effort and budget_tokens is None and _cfg:
+        budget_tokens = _cfg.thinking.effort_to_budget(str(reasoning_effort))
+
+    # Apply config defaults
+    if _cfg:
+        if budget_tokens is None and _cfg.thinking.default_reasoning_budget > 0:
+            budget_tokens = _cfg.thinking.default_reasoning_budget
+        if think_enabled is None and not _cfg.thinking.enabled:
+            think_enabled = False
+
     # Build chat messages
     chat_messages: list[dict] = []
     if system_prompt:
@@ -1760,27 +1918,58 @@ async def anthropic_messages(request: Request):
     except Exception:
         repo_id = model_name
 
+    # Claude Code sends Anthropic model names (claude-haiku-*, claude-sonnet-*, etc.)
+    # which don't exist on HuggingFace. Fall back to loaded or default model.
+    if repo_id.startswith(("claude-", "anthropic/")):
+        from ppmlx.engine import get_engine
+        loaded = get_engine().list_loaded()
+        if loaded:
+            fallback = loaded[-1]
+        else:
+            try:
+                from ppmlx.config import load_config
+                from ppmlx.models import resolve_alias as _resolve
+                fallback = _resolve(load_config().defaults.model)
+            except Exception:
+                fallback = None
+        if fallback:
+            log.info("Mapping Anthropic model %s → %s", repo_id, fallback)
+            repo_id = fallback
+        else:
+            log.warning("No model available to map %s to", repo_id)
+
     msg_id = "msg_" + uuid.uuid4().hex[:24]
+
+    log.info(
+        "POST /v1/messages model=%s think=%s budget=%s effort=%s effort_base=%s stream=%s tools=%d",
+        model_name, think_enabled, budget_tokens, reasoning_effort,
+        _cfg.thinking.effort_base if _cfg else "?", stream, len(tools or []),
+    )
 
     if stream:
         return _stream_anthropic(
             msg_id, model_name, repo_id, chat_messages,
             temperature, max_tokens, oai_tools, tools,
+            think=think_enabled, reasoning_budget=budget_tokens,
         )
     else:
         return await _nonstream_anthropic(
             msg_id, model_name, repo_id, chat_messages,
             temperature, max_tokens, oai_tools, tools,
+            think=think_enabled, reasoning_budget=budget_tokens,
         )
 
 
 def _stream_anthropic(
     msg_id, model_name, repo_id, messages,
     temperature, max_tokens, oai_tools, orig_tools,
+    think=None, reasoning_budget=None,
 ):
     from fastapi.responses import StreamingResponse
 
     async def event_generator():
+        log.debug("_stream_anthropic start model=%s think=%s budget=%s",
+                  model_name, think, reasoning_budget)
         # message_start
         yield _anthropic_sse({
             "type": "message_start",
@@ -1800,36 +1989,68 @@ def _stream_anthropic(
         # State machine: track whether we're inside <think> or in text.
         # We use strip_thinking=False so we get raw tokens including
         # <think>...</think>, then emit them as thinking_delta / text_delta.
-        # Start in thinking mode — Qwen3 template injects <think> into
-        # the prompt so the model starts generating inside a thinking block.
-        in_thinking = True
-        thinking_started = True
+        # Start outside thinking — detect <think> tag dynamically.
+        in_thinking = False
+        thinking_started = False
         text_started = False
         buf = ""
 
         try:
             from ppmlx.engine import get_engine
             engine = get_engine()
-            gen = engine.stream_generate(
-                repo_id, messages,
-                temperature=0.7 if temperature is None else temperature,
-                max_tokens=max_tokens,
-                tools=oai_tools,
-                strip_thinking=False,  # We handle thinking/text separation here
-                enable_thinking=not bool(oai_tools),  # Disable thinking for tool calls
-            )
+            # Determine thinking mode
+            # When a reasoning_budget is set, allow thinking even with tools
+            # (the budget prevents infinite thinking loops).
+            if think is not None:
+                _enable_thinking = think
+            elif oai_tools and not reasoning_budget:
+                _enable_thinking = False
+            else:
+                _enable_thinking = True
 
-            # Emit thinking block start immediately
-            yield _anthropic_sse({
-                "type": "content_block_start",
-                "index": content_idx,
-                "content_block": {"type": "thinking", "thinking": ""},
-            })
+            _gen_kwargs = {
+                "temperature": 0.7 if temperature is None else temperature,
+                "max_tokens": max_tokens,
+                "tools": oai_tools,
+                "strip_thinking": False,  # We handle thinking/text separation here
+                "enable_thinking": _enable_thinking,
+            }
+            if reasoning_budget is not None:
+                _gen_kwargs["reasoning_budget"] = reasoning_budget
+            try:
+                gen = engine.stream_generate(repo_id, messages, **_gen_kwargs)
+            except TypeError:
+                _gen_kwargs.pop("reasoning_budget", None)
+                gen = engine.stream_generate(repo_id, messages, **_gen_kwargs)
 
+            # Detect if model's chat template injects <think> into the prompt
+            # (e.g. Qwen3, DeepSeek-R1). If so, model output starts INSIDE
+            # a thinking block without emitting <think>.
+            if _enable_thinking:
+                try:
+                    from ppmlx.engine import _is_thinking_model
+                    lm = engine._get_or_load(repo_id)
+                    prompt = engine._apply_chat_template(lm, messages, enable_thinking=True)
+                    if re.search(r"<think>\s*$", prompt):
+                        in_thinking = True
+                        thinking_started = True
+                        yield _anthropic_sse({
+                            "type": "content_block_start",
+                            "index": content_idx,
+                            "content_block": {"type": "thinking", "thinking": ""},
+                        })
+                except Exception:
+                    pass
+
+            _first_chunks_log = []
             async for chunk in _async_iter_sync_gen(gen):
                 if not chunk:
-                    yield _sse("keepalive", {})
+                    yield _anthropic_sse({"type": "ping"})
                     continue
+                if len(_first_chunks_log) < 5:
+                    _first_chunks_log.append(repr(chunk))
+                    if len(_first_chunks_log) == 5:
+                        log.info("First 5 chunks: %s", _first_chunks_log)
                 buf += chunk
 
                 # Detect transitions between thinking and text
@@ -2007,6 +2228,10 @@ def _stream_anthropic(
             })
             return
 
+        log.info("/v1/messages stream done: full_text=%d chars, text_started=%s, "
+                 "thinking_started=%s, in_thinking=%s",
+                 len(full_text), text_started, thinking_started, in_thinking)
+
         # Parse tool calls from the collected text output
         tokenizer = engine.get_tokenizer(repo_id)
         remaining_text, tool_calls = _parse_tool_calls(full_text, tokenizer=tokenizer, tools=oai_tools)
@@ -2061,23 +2286,55 @@ def _stream_anthropic(
         })
         yield _anthropic_sse({"type": "message_stop"})
 
+        # Log request to DB
+        try:
+            _log_request(
+                endpoint="/v1/messages",
+                model_alias=model_name,
+                model_repo=repo_id,
+                stream=True,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=prompt_tokens + completion_tokens,
+                messages_count=len(messages),
+            )
+        except Exception:
+            pass
+
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 async def _nonstream_anthropic(
     msg_id, model_name, repo_id, messages,
     temperature, max_tokens, oai_tools, orig_tools,
+    think=None, reasoning_budget=None,
 ):
+    # Determine thinking mode
+    if think is not None:
+        enable_thinking = think
+    elif oai_tools and not reasoning_budget:
+        enable_thinking = False
+    else:
+        enable_thinking = True
+
     try:
         from ppmlx.engine import get_engine
         engine = get_engine()
-        text, reasoning, prompt_tokens, completion_tokens = engine.generate(
-            repo_id, messages,
-            temperature=0.7 if temperature is None else temperature,
-            max_tokens=max_tokens,
-            tools=oai_tools,
-            enable_thinking=not bool(oai_tools),  # Disable thinking for tool calls
-        )
+        gen_kwargs = {
+            "temperature": 0.7 if temperature is None else temperature,
+            "max_tokens": max_tokens,
+            "tools": oai_tools,
+            "enable_thinking": enable_thinking,
+        }
+        if reasoning_budget is not None:
+            gen_kwargs["reasoning_budget"] = reasoning_budget
+        try:
+            result = engine.generate(repo_id, messages, **gen_kwargs)
+            text, reasoning, prompt_tokens, completion_tokens = result[0], result[1], result[2], result[3]
+        except TypeError:
+            gen_kwargs.pop("reasoning_budget", None)
+            result = engine.generate(repo_id, messages, **gen_kwargs)
+            text, reasoning, prompt_tokens, completion_tokens = result[0], result[1], result[2], result[3]
     except Exception:
         log.exception("Anthropic messages generation failed")
         raise HTTPException(status_code=503, detail="Model generation failed")

@@ -1390,6 +1390,26 @@ def quantize(
 @app.command(name="config")
 def config_cmd(
     hf_token: Optional[str] = typer.Option(None, "--hf-token", help="Set HuggingFace token"),
+    thinking: Optional[bool] = typer.Option(
+        None,
+        "--thinking/--no-thinking",
+        help="Enable or disable thinking mode for reasoning models.",
+    ),
+    reasoning_budget: Optional[int] = typer.Option(
+        None,
+        "--reasoning-budget",
+        help="Default max tokens for thinking phase (0 = unlimited).",
+    ),
+    effort_base: Optional[int] = typer.Option(
+        None,
+        "--effort-base",
+        help="Base tokens for effort mapping (low=base, medium=base*4, high=base*32).",
+    ),
+    max_tools_tokens: Optional[int] = typer.Option(
+        None,
+        "--max-tools-tokens",
+        help="Max tokens for tool definitions (0 = unlimited).",
+    ),
     analytics: Optional[bool] = typer.Option(
         None,
         "--analytics/--no-analytics",
@@ -1410,23 +1430,41 @@ def config_cmd(
     except Exception:
         data = {}
 
-    if hf_token is not None:
-        # Non-interactive: set token directly
-        data.setdefault("auth", {})["hf_token"] = hf_token
+    # Non-interactive: apply any flags passed via CLI
+    has_flag = any(v is not None for v in [hf_token, thinking, reasoning_budget, effort_base, max_tools_tokens, analytics])
+    if has_flag:
+        if hf_token is not None:
+            data.setdefault("auth", {})["hf_token"] = hf_token
+        if thinking is not None:
+            data.setdefault("thinking", {})["enabled"] = thinking
+        if reasoning_budget is not None:
+            data.setdefault("thinking", {})["default_reasoning_budget"] = reasoning_budget
+        if effort_base is not None:
+            data.setdefault("thinking", {})["effort_base"] = effort_base
+        if max_tools_tokens is not None:
+            data.setdefault("server", {})["max_tools_tokens"] = max_tools_tokens
         if analytics is not None:
             data.setdefault("analytics", {})["enabled"] = analytics
-        cfg_path.write_bytes(tomli_w.dumps(data).encode())
-        console.print(f"[green]HuggingFace token saved to {cfg_path}[/green]")
-        return
-
-    if analytics is not None:
-        data.setdefault("analytics", {})["enabled"] = analytics
         try:
             cfg_path.write_bytes(tomli_w.dumps(data).encode())
         except Exception as exc:
             console.print(f"[red]Failed to write config: {exc}[/red]")
             raise typer.Exit(1)
-        console.print(f"[green]Anonymous analytics {'enabled' if analytics else 'disabled'}.[/green]")
+        msgs = []
+        if hf_token is not None:
+            msgs.append(f"HuggingFace token saved")
+        if thinking is not None:
+            msgs.append(f"Thinking {'enabled' if thinking else 'disabled'}")
+        if reasoning_budget is not None:
+            msgs.append(f"Reasoning budget set to {reasoning_budget} tokens")
+        if effort_base is not None:
+            msgs.append(f"Effort base set to {effort_base} (low={effort_base}, med={effort_base*4}, high={effort_base*32})")
+        if max_tools_tokens is not None:
+            msgs.append(f"Max tools tokens set to {'unlimited' if max_tools_tokens == 0 else max_tools_tokens}")
+        if analytics is not None:
+            msgs.append(f"Analytics {'enabled' if analytics else 'disabled'}")
+        console.print(f"[green]{' | '.join(msgs)}.[/green]")
+        console.print(f"[dim]{cfg_path}[/dim]")
         return
 
     # Interactive TUI config

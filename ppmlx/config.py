@@ -13,6 +13,7 @@ class ServerConfig:
     port: int = 6767
     cors: bool = True
     max_loaded_models: int = 2
+    max_tools_tokens: int = 12000
 
 
 @dataclass
@@ -46,6 +47,19 @@ class ToolAwarenessConfig:
 
 
 @dataclass
+class ThinkingConfig:
+    enabled: bool = True
+    default_reasoning_budget: int = 2048
+    effort_base: int = 256
+
+    def effort_to_budget(self, effort: str) -> int | None:
+        """Map reasoning_effort (low/medium/high) to token budget using effort_base."""
+        multipliers = {"low": 1, "medium": 4, "high": 32}
+        m = multipliers.get(effort.lower())
+        return self.effort_base * m if m is not None else None
+
+
+@dataclass
 class AnalyticsConfig:
     enabled: bool = False
     provider: str = "posthog"
@@ -62,6 +76,7 @@ class Config:
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     registry: RegistryConfig = field(default_factory=RegistryConfig)
     tool_awareness: ToolAwarenessConfig = field(default_factory=ToolAwarenessConfig)
+    thinking: ThinkingConfig = field(default_factory=ThinkingConfig)
     analytics: AnalyticsConfig = field(default_factory=AnalyticsConfig)
 
 
@@ -122,6 +137,7 @@ def _apply_toml(cfg: Config, data: dict) -> None:
         if "port" in s: cfg.server.port = int(s["port"])
         if "cors" in s: cfg.server.cors = bool(s["cors"])
         if "max_loaded_models" in s: cfg.server.max_loaded_models = int(s["max_loaded_models"])
+        if "max_tools_tokens" in s: cfg.server.max_tools_tokens = int(s["max_tools_tokens"])
     if "defaults" in data:
         d = data["defaults"]
         if "model" in d: cfg.defaults.model = str(d["model"])
@@ -144,6 +160,11 @@ def _apply_toml(cfg: Config, data: dict) -> None:
         ta = data["tool_awareness"]
         if "mode" in ta:
             cfg.tool_awareness.mode = _normalize_tool_awareness_mode(ta["mode"])
+    if "thinking" in data:
+        th = data["thinking"]
+        if "enabled" in th: cfg.thinking.enabled = bool(th["enabled"])
+        if "default_reasoning_budget" in th: cfg.thinking.default_reasoning_budget = int(th["default_reasoning_budget"])
+        if "effort_base" in th: cfg.thinking.effort_base = int(th["effort_base"])
     if "analytics" in data:
         an = data["analytics"]
         if "enabled" in an: cfg.analytics.enabled = bool(an["enabled"])
@@ -163,6 +184,7 @@ def _apply_env(cfg: Config) -> None:
         "PPMLX_PORT": ("server", "port", int),
         "PPMLX_CORS": ("server", "cors", _parse_bool),
         "PPMLX_MAX_LOADED_MODELS": ("server", "max_loaded_models", int),
+        "PPMLX_MAX_TOOLS_TOKENS": ("server", "max_tools_tokens", int),
         "PPMLX_DEFAULT_MODEL": ("defaults", "model", str),
         "PPMLX_DEFAULT_EMBED_MODEL": ("defaults", "embed_model", str),
         "PPMLX_TEMP": ("defaults", "temperature", float),
@@ -173,6 +195,9 @@ def _apply_env(cfg: Config) -> None:
         "PPMLX_MEMORY_WIRED_LIMIT": ("memory", "wired_limit_mb", int),
         "PPMLX_REGISTRY_ENABLED": ("registry", "enabled", _parse_bool),
         "PPMLX_INJECT_TOOL_AWARENESS": ("tool_awareness", "mode", _normalize_tool_awareness_mode),
+        "PPMLX_THINKING_ENABLED": ("thinking", "enabled", _parse_bool),
+        "PPMLX_THINKING_BUDGET": ("thinking", "default_reasoning_budget", int),
+        "PPMLX_EFFORT_BASE": ("thinking", "effort_base", int),
         "PPMLX_ANALYTICS_ENABLED": ("analytics", "enabled", _parse_bool),
         "PPMLX_ANALYTICS_PROVIDER": ("analytics", "provider", _normalize_analytics_provider),
         "PPMLX_ANALYTICS_HOST": ("analytics", "host", str),
