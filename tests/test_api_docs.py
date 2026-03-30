@@ -13,31 +13,53 @@ for mod in [
     if mod not in sys.modules:
         sys.modules[mod] = MagicMock()
 
+# Save original module attributes so they can be restored by conftest's
+# _restore_module_attrs fixture.  We only set mocks on modules that are
+# already real (pre-imported by conftest) to avoid polluting imports in
+# other test files that capture names at collection time.
+_originals: dict[str, dict[str, object]] = {}
+def _save_and_set(mod_name: str, attr: str, value: object) -> None:
+    mod = sys.modules[mod_name]
+    _originals.setdefault(mod_name, {})[attr] = getattr(mod, attr, None)
+    setattr(mod, attr, value)
+
 # Set up minimal mocks so the app can start
 mock_engine = MagicMock()
 mock_engine.list_loaded.return_value = []
 mock_engine.generate.return_value = ("Hello!", None, 10, 5)
-sys.modules["ppmlx.engine"].get_engine = MagicMock(return_value=mock_engine)
+_save_and_set("ppmlx.engine", "get_engine", MagicMock(return_value=mock_engine))
 
 mock_db = MagicMock()
 mock_db.get_stats.return_value = {"total_requests": 0, "avg_duration_ms": None, "by_model": []}
-sys.modules["ppmlx.db"].get_db = MagicMock(return_value=mock_db)
+_save_and_set("ppmlx.db", "get_db", MagicMock(return_value=mock_db))
 
-sys.modules["ppmlx.memory"].get_system_ram_gb = MagicMock(return_value=16.0)
+_save_and_set("ppmlx.memory", "get_system_ram_gb", MagicMock(return_value=16.0))
 
 mock_config = MagicMock()
 mock_config.logging.snapshot_interval_seconds = 60
-sys.modules["ppmlx.config"].load_config = MagicMock(return_value=mock_config)
+_save_and_set("ppmlx.config", "load_config", MagicMock(return_value=mock_config))
 
-sys.modules["ppmlx.models"].resolve_alias = MagicMock(side_effect=lambda x: x)
-sys.modules["ppmlx.models"].list_local_models = MagicMock(return_value=[])
-sys.modules["ppmlx.models"].all_aliases = MagicMock(return_value=[])
-sys.modules["ppmlx.models"].is_vision_model = MagicMock(return_value=False)
-sys.modules["ppmlx.models"].is_embed_model = MagicMock(return_value=False)
+_save_and_set("ppmlx.models", "resolve_alias", MagicMock(side_effect=lambda x: x))
+_save_and_set("ppmlx.models", "list_local_models", MagicMock(return_value=[]))
+_save_and_set("ppmlx.models", "all_aliases", MagicMock(return_value=[]))
+_save_and_set("ppmlx.models", "is_vision_model", MagicMock(return_value=False))
+_save_and_set("ppmlx.models", "is_embed_model", MagicMock(return_value=False))
 
 import pytest
 from fastapi.testclient import TestClient
 from ppmlx.server import app
+
+# Restore original module attributes immediately after importing the server
+# app.  The mocks above are only needed for server.py's module-level init;
+# leaving them in place would pollute later-collected test files (e.g.
+# test_config.py) that capture names via ``from ppmlx.X import Y``.
+for _mod_name, _attrs in _originals.items():
+    _mod = sys.modules.get(_mod_name)
+    if _mod is not None:
+        for _attr, _val in _attrs.items():
+            if _val is not None:
+                setattr(_mod, _attr, _val)
+del _mod_name, _attrs, _mod, _attr, _val
 
 
 @pytest.fixture
