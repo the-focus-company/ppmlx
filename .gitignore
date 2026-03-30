@@ -5,6 +5,7 @@ __pycache__/
 *.so
 *.pyc
 .Python
+.DS_Store
 
 # Virtual environments
 .venv/
@@ -13,6 +14,8 @@ env/
 .env
 
 # Build / packaging
+.claude/
+.webui_secret_key
 dist/
 build/
 *.egg-info/
@@ -23,12 +26,10 @@ build/
 .ruff_cache/
 
 # IDE / OS artifacts
-.DS_Store
 *.DS_Store
 
 # Tool-specific
 .claire/
-.claude/
 uv.lock
 *.html
 
