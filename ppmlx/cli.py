@@ -4,7 +4,7 @@ import os
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -1716,6 +1716,7 @@ def garden_browse(
                 console.print(f"[dim]Available use cases: {', '.join(sorted(all_tags))}[/dim]")
         return
 
+    from rich.table import Table
     table = Table(title=f"Model Garden (system RAM: {system_ram:.0f} GB)", show_header=True)
     table.add_column("", width=3)
     table.add_column("Name", style="cyan", no_wrap=True)
