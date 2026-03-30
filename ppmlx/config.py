@@ -14,6 +14,7 @@ class ServerConfig:
     cors: bool = True
     max_loaded_models: int = 2
     max_tools_tokens: int = 12000
+    ttl_seconds: int = 0  # 0 = disabled; auto-unload idle models after N seconds
 
 
 @dataclass
@@ -138,6 +139,7 @@ def _apply_toml(cfg: Config, data: dict) -> None:
         if "cors" in s: cfg.server.cors = bool(s["cors"])
         if "max_loaded_models" in s: cfg.server.max_loaded_models = int(s["max_loaded_models"])
         if "max_tools_tokens" in s: cfg.server.max_tools_tokens = int(s["max_tools_tokens"])
+        if "ttl_seconds" in s: cfg.server.ttl_seconds = int(s["ttl_seconds"])
     if "defaults" in data:
         d = data["defaults"]
         if "model" in d: cfg.defaults.model = str(d["model"])
@@ -185,6 +187,7 @@ def _apply_env(cfg: Config) -> None:
         "PPMLX_CORS": ("server", "cors", _parse_bool),
         "PPMLX_MAX_LOADED_MODELS": ("server", "max_loaded_models", int),
         "PPMLX_MAX_TOOLS_TOKENS": ("server", "max_tools_tokens", int),
+        "PPMLX_TTL_SECONDS": ("server", "ttl_seconds", int),
         "PPMLX_DEFAULT_MODEL": ("defaults", "model", str),
         "PPMLX_DEFAULT_EMBED_MODEL": ("defaults", "embed_model", str),
         "PPMLX_TEMP": ("defaults", "temperature", float),
