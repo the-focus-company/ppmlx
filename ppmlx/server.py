@@ -541,6 +541,18 @@ def _normalize_tool_messages(messages: list[dict]) -> list[dict]:
     return out
 
 
+def _speculative_kwargs(
+    draft_model: str | None, speculative_tokens: int | None,
+) -> dict:
+    """Build keyword arguments for speculative decoding (empty if disabled)."""
+    if draft_model is None:
+        return {}
+    kw: dict = {"draft_model": draft_model}
+    if speculative_tokens is not None:
+        kw["num_draft_tokens"] = speculative_tokens
+    return kw
+
+
 # ── Endpoints ───────────────────────────────────────────────────────────
 
 @app.get("/")
@@ -722,11 +734,23 @@ async def chat_completions(request: Request):
         },
     )
 
+    # ppmlx extension: speculative decoding via draft model
+    draft_model = body.get("draft_model")
+    speculative_tokens = body.get("speculative_tokens")
+
     try:
         from ppmlx.models import resolve_alias
         repo_id = resolve_alias(model_name)
     except Exception:
         repo_id = model_name
+
+    # Resolve draft model alias (reuses same resolve_alias)
+    draft_repo_id: str | None = None
+    if draft_model:
+        try:
+            draft_repo_id = resolve_alias(draft_model)
+        except Exception:
+            draft_repo_id = draft_model
 
     log.info(
         "POST /v1/chat/completions model=%s think=%s budget=%s effort=%s stream=%s tools=%d",
@@ -747,6 +771,8 @@ async def chat_completions(request: Request):
             engine_type, temperature, top_p, max_tokens, stop, seed,
             repetition_penalty, request, start_ts, tools,
             think=think, reasoning_budget=reasoning_budget,
+            draft_model=draft_repo_id,
+            speculative_tokens=speculative_tokens,
         )
     else:
         return await _nonstream_chat(
@@ -754,6 +780,8 @@ async def chat_completions(request: Request):
             engine_type, temperature, top_p, max_tokens, stop, seed,
             repetition_penalty, request, start_ts, tools,
             think=think, reasoning_budget=reasoning_budget,
+            draft_model=draft_repo_id,
+            speculative_tokens=speculative_tokens,
         )
 
 
@@ -762,6 +790,7 @@ def _stream_chat(
     engine_type, temperature, top_p, max_tokens, stop, seed,
     repetition_penalty, request, start_ts, tools=None,
     think=None, reasoning_budget=None,
+    draft_model=None, speculative_tokens=None,
 ):
     """Return streaming SSE response."""
     from fastapi.responses import StreamingResponse
@@ -833,6 +862,7 @@ def _stream_chat(
                     enable_thinking=enable_thinking,
                     tools=tools,
                     **extra_kwargs,
+                    **_speculative_kwargs(draft_model, speculative_tokens),
                 )
 
                 # When tools are provided, buffer output and filter tool call
@@ -1118,6 +1148,7 @@ async def _nonstream_chat(
     engine_type, temperature, top_p, max_tokens, stop, seed,
     repetition_penalty, request, start_ts, tools=None,
     think=None, reasoning_budget=None,
+    draft_model=None, speculative_tokens=None,
 ):
     """Return non-streaming JSON response."""
     # Determine thinking mode: explicit param > tool heuristic > default on
@@ -1141,6 +1172,7 @@ async def _nonstream_chat(
                 repetition_penalty=repetition_penalty,
                 enable_thinking=enable_thinking,
                 tools=tools,
+                **_speculative_kwargs(draft_model, speculative_tokens),
             )
             if reasoning_budget is not None:
                 gen_kwargs["reasoning_budget"] = reasoning_budget

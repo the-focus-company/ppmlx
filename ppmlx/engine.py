@@ -222,6 +222,8 @@ class TextEngine:
         enable_thinking: bool = True,
         tools: list[dict] | None = None,
         reasoning_budget: int | None = None,
+        draft_model: str | None = None,
+        num_draft_tokens: int = 5,
     ) -> GenerateResult:
         """
         Generate a response.
@@ -233,6 +235,8 @@ class TextEngine:
         max_tokens=None means 50% of the model's context window (capped at _MAX_AUTO_TOKENS,
         or _MAX_AUTO_TOKENS_THINKING for thinking models).
         reasoning_budget limits how many tokens the model may spend on reasoning.
+        draft_model: optional repo_id/alias for a small draft model to enable speculative decoding.
+        num_draft_tokens: number of candidate tokens the draft model proposes per step (default 5).
         """
         from mlx_lm import generate as mlx_generate
 
@@ -263,6 +267,12 @@ class TextEngine:
                 )
             except (ImportError, TypeError):
                 pass
+
+        # Speculative decoding: load draft model and pass to mlx-lm
+        if draft_model is not None:
+            draft_lm = self._get_or_load(draft_model)
+            kwargs["draft_model"] = draft_lm.model
+            kwargs["num_draft_tokens"] = num_draft_tokens
 
         text = mlx_generate(lm.model, lm.tokenizer, **kwargs)
 
@@ -317,6 +327,8 @@ class TextEngine:
         strip_thinking: bool = True,
         tools: list[dict] | None = None,
         reasoning_budget: int | None = None,
+        draft_model: str | None = None,
+        num_draft_tokens: int = 5,
     ) -> Iterator[str]:
         """
         Stream token-by-token generation.
@@ -326,6 +338,8 @@ class TextEngine:
         max_tokens=None means 50% of the model's context window (capped at _MAX_AUTO_TOKENS,
         or _MAX_AUTO_TOKENS_THINKING for thinking models).
         reasoning_budget limits how many tokens (approximate) the model may spend on reasoning.
+        draft_model: optional repo_id/alias for a small draft model to enable speculative decoding.
+        num_draft_tokens: number of candidate tokens the draft model proposes per step (default 5).
         """
         from mlx_lm import stream_generate as mlx_stream
 
@@ -355,6 +369,12 @@ class TextEngine:
                 )
             except (ImportError, TypeError):
                 pass
+
+        # Speculative decoding: load draft model and pass to mlx-lm
+        if draft_model is not None:
+            draft_lm = self._get_or_load(draft_model)
+            kwargs["draft_model"] = draft_lm.model
+            kwargs["num_draft_tokens"] = num_draft_tokens
 
         if not strip_thinking:
             for response in mlx_stream(lm.model, lm.tokenizer, **kwargs):

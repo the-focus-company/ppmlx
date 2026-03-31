@@ -53,6 +53,8 @@ class ChatCompletionRequest(BaseModel):
     repetition_penalty: float | None = Field(default=None, ge=0.0, le=2.0)  # ppmlx extension
     think: bool | None = None  # ppmlx extension: force enable/disable thinking
     reasoning_budget: int | None = Field(default=None, ge=1, le=131072)  # ppmlx extension: max reasoning tokens
+    draft_model: str | None = None  # ppmlx extension: speculative decoding
+    speculative_tokens: int | None = None  # ppmlx extension: draft tokens per step
 
     @field_validator("messages")
     @classmethod
