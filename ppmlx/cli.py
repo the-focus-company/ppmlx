@@ -4,7 +4,8 @@ import os
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -21,6 +22,12 @@ app = typer.Typer(
     help="Run LLMs locally on Apple Silicon via MLX",
     no_args_is_help=True,
 )
+template_app = typer.Typer(
+    name="template",
+    help="Manage and run prompt templates",
+    no_args_is_help=True,
+)
+app.add_typer(template_app, name="template")
 console = Console()
 
 _VALID_QUANTIZE_BITS = frozenset({2, 3, 4, 6, 8})
@@ -2115,6 +2122,333 @@ def process(
 
     if stats.failed > 0:
         raise typer.Exit(1)
+
+
+# ── Template commands ──────────────────────────────────────────────────
+
+
+@template_app.command(name="list")
+def template_list():
+    """List all available prompt templates."""
+    from rich.table import Table
+    from ppmlx.templates import list_templates
+
+    templates = list_templates()
+    if not templates:
+        console.print("[dim]No templates found.[/dim]")
+        return
+
+    table = Table(title="Prompt Templates", show_header=True)
+    table.add_column("Name", style="cyan", no_wrap=True)
+    table.add_column("Description")
+    table.add_column("Source", style="dim")
+
+    for t in templates:
+        table.add_row(t.name, t.description, t.source)
+
+    console.print(table)
+    console.print(f"\n[dim]Run a template:  ppmlx template run <name> --var input=\"your text\"[/dim]")
+    console.print(f"[dim]Show details:    ppmlx template show <name>[/dim]")
+
+
+@template_app.command(name="show")
+def template_show(
+    name: str = typer.Argument(..., help="Template name"),
+):
+    """Show details of a prompt template."""
+    from ppmlx.templates import get_template, TemplateNotFoundError
+
+    try:
+        t = get_template(name)
+    except TemplateNotFoundError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+
+    console.print(Panel(
+        f"[bold]{t.name}[/bold]\n"
+        f"[dim]{t.description}[/dim]\n"
+        f"[dim]Source: {t.source}[/dim]",
+        border_style="cyan",
+    ))
+
+    if t.system:
+        console.print("\n[bold]System prompt:[/bold]")
+        console.print(f"  {t.system}")
+
+    console.print("\n[bold]User prompt template:[/bold]")
+    console.print(f"  {t.prompt}")
+
+    if t.variables:
+        console.print("\n[bold]Variables:[/bold]")
+        for var_name, spec in t.variables.items():
+            req = "[red]required[/red]" if spec.required else f"default: [green]{spec.default}[/green]"
+            desc = f"  {spec.description}" if spec.description else ""
+            console.print(f"  [cyan]{{{{{var_name}}}}}[/cyan]  ({req}){desc}")
+
+    if t.parameters:
+        console.print("\n[bold]Parameters:[/bold]")
+        for k, v in t.parameters.items():
+            console.print(f"  {k}: {v}")
+
+    if t.default_model:
+        console.print(f"\n[bold]Default model:[/bold] {t.default_model}")
+
+
+@template_app.command(name="run")
+def template_run(
+    name: str = typer.Argument(..., help="Template name"),
+    var: list[str] = typer.Option([], "--var", "-v", help="Variable in key=value format (repeatable)"),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="Model to use (overrides template default)"),
+    raw: bool = typer.Option(False, "--raw", "-r", help="Output raw text without formatting"),
+):
+    """Run a prompt template with variables.
+
+    Variables are passed with --var key=value. The special 'input' variable
+    is read from stdin if not provided and stdin is piped.
+
+    Examples:
+      ppmlx template run summarize --var input="Long text here..."
+      cat file.txt | ppmlx template run summarize
+      echo "Hello world" | ppmlx template run translate --var lang=Spanish
+    """
+    from ppmlx.templates import (
+        get_template, render_template, read_stdin_if_available,
+        TemplateNotFoundError, TemplateMissingVariableError,
+    )
+
+    try:
+        t = get_template(name)
+    except TemplateNotFoundError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+
+    # Parse --var key=value pairs
+    variables: dict[str, str] = {}
+    for v in var:
+        if "=" not in v:
+            console.print(f"[red]Invalid variable format: '{v}'. Use key=value[/red]")
+            raise typer.Exit(1)
+        key, _, value = v.partition("=")
+        variables[key.strip()] = value.strip()
+
+    # Read stdin for 'input' variable if not provided and stdin is piped
+    if "input" in t.variables and "input" not in variables:
+        stdin_data = read_stdin_if_available()
+        if stdin_data:
+            variables["input"] = stdin_data.strip()
+
+    # Render the template
+    try:
+        system_prompt, user_prompt = render_template(t, variables)
+    except TemplateMissingVariableError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+
+    # Determine which model to use
+    effective_model = model or t.default_model
+    if not effective_model:
+        from ppmlx.config import load_config
+        cfg = load_config()
+        effective_model = cfg.defaults.model
+
+    # Build messages
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": user_prompt})
+
+    # Get generation parameters from template
+    temperature = t.parameters.get("temperature", 0.7)
+    max_tokens = t.parameters.get("max_tokens", 2048)
+
+    # Run inference
+    from ppmlx.models import resolve_alias, get_model_path, download_model, ModelNotFoundError
+    from ppmlx.engine import get_engine
+
+    try:
+        repo_id = resolve_alias(effective_model)
+    except ModelNotFoundError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+
+    local_path = get_model_path(repo_id)
+    if not local_path:
+        console.print(f"[yellow]Downloading {effective_model}...[/yellow]")
+        try:
+            local_path = download_model(effective_model)
+        except Exception as e:
+            console.print(f"[red]Download failed: {e}[/red]")
+            raise typer.Exit(1)
+
+    engine = get_engine()
+
+    if not raw:
+        console.print(f"[dim]Template: {t.name} | Model: {effective_model}[/dim]")
+
+    try:
+        for chunk in engine.stream_generate(
+            repo_id, messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        ):
+            if raw:
+                sys.stdout.write(chunk)
+                sys.stdout.flush()
+            else:
+                console.print(chunk, end="")
+        if raw:
+            sys.stdout.write("\n")
+        else:
+            console.print()
+    except KeyboardInterrupt:
+        console.print("\n[dim]Generation interrupted.[/dim]")
+        raise typer.Exit(1)
+    except Exception as exc:
+        console.print(f"\n[red]Error: {exc}[/red]")
+        raise typer.Exit(1)
+
+
+@template_app.command(name="create")
+def template_create(
+    name: str = typer.Argument(..., help="Name for the new template"),
+    description: str = typer.Option("", "--description", "-d", help="Template description"),
+    system: str = typer.Option("", "--system", "-s", help="System prompt"),
+    prompt: str = typer.Option("", "--prompt", "-p", help="User prompt template (use {{var}} for variables)"),
+):
+    """Create a new user template.
+
+    Templates are saved to ~/.ppmlx/templates/<name>.yaml.
+
+    Example:
+      ppmlx template create my_template \\
+        --description "My custom template" \\
+        --system "You are helpful." \\
+        --prompt "Help me with: {{input}}"
+    """
+    import yaml
+
+    from ppmlx.templates import _user_dir, _VAR_PATTERN
+
+    if not prompt:
+        console.print("[red]--prompt is required. Use {{input}} for the main variable.[/red]")
+        raise typer.Exit(1)
+
+    found_vars = set(_VAR_PATTERN.findall(prompt))
+    if system:
+        found_vars.update(_VAR_PATTERN.findall(system))
+
+    variables: dict[str, dict] = {}
+    for v in sorted(found_vars):
+        variables[v] = {"required": True, "description": f"Value for {v}"}
+
+    template_data = {
+        "name": name,
+        "description": description or f"Custom template: {name}",
+        "system": system,
+        "prompt": prompt,
+        "variables": variables,
+        "parameters": {"temperature": 0.7, "max_tokens": 2048},
+    }
+
+    out_path = _user_dir(create=True) / f"{name}.yaml"
+    out_path.write_text(yaml.dump(template_data, default_flow_style=False, sort_keys=False))
+
+    console.print(f"[green]Template created: {out_path}[/green]")
+    console.print(f"[dim]Run it with: ppmlx template run {name} --var input=\"your text\"[/dim]")
+
+
+@app.command()
+def bench(
+    model: str = typer.Argument(..., help="Model name or alias to benchmark"),
+    runs: int = typer.Option(3, "--runs", "-n", help="Number of iterations per scenario"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Save JSON results to this path"),
+    scenarios: Optional[str] = typer.Option(None, "--scenarios", "-s", help="Comma-separated scenario names (simple,complex,long_context)"),
+    compare: Optional[str] = typer.Option(None, "--compare", "-c", help="Compare against a baseline JSON file"),
+    host: str = typer.Option("127.0.0.1", "--host", help="Server host"),
+    port: int = typer.Option(6767, "--port", "-p", help="Server port"),
+    no_auto_server: bool = typer.Option(False, "--no-auto-server", help="Do not auto-start the server"),
+):
+    """Run standardized benchmarks against a model."""
+    from ppmlx.bench import (
+        BenchmarkRunner,
+        SCENARIOS,
+        print_results,
+        print_comparison,
+        save_results,
+        load_results,
+    )
+
+    base_url = f"http://{host}:{port}"
+    scenario_list = [s.strip() for s in scenarios.split(",")] if scenarios else None
+
+    # Check if server is already running
+    server_proc = None
+    if not no_auto_server:
+        import httpx
+
+        try:
+            resp = httpx.get(f"{base_url}/health", timeout=2.0)
+            resp.raise_for_status()
+            console.print(f"[green]Server already running at {base_url}[/green]")
+        except Exception:
+            console.print(f"[yellow]Starting ppmlx server on {base_url}...[/yellow]")
+            server_proc = subprocess.Popen(
+                [sys.executable, "-m", "ppmlx.cli", "serve", "--host", host, "--port", str(port)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            # Wait for server to become healthy
+            healthy = False
+            for _ in range(30):
+                time.sleep(1)
+                try:
+                    resp = httpx.get(f"{base_url}/health", timeout=2.0)
+                    if resp.status_code == 200:
+                        healthy = True
+                        break
+                except Exception:
+                    continue
+            if not healthy:
+                console.print("[red]Server failed to start within 30 seconds.[/red]")
+                if server_proc:
+                    server_proc.terminate()
+                raise typer.Exit(1)
+            console.print(f"[green]Server started at {base_url}[/green]")
+
+    try:
+        try:
+            runner = BenchmarkRunner(
+                model=model,
+                base_url=base_url,
+                runs=runs,
+                scenarios=scenario_list,
+            )
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(1)
+        result = runner.run()
+        print_results(result, console)
+
+        # Save results
+        if output:
+            out_path = save_results(result, Path(output))
+            console.print(f"\n[green]Results saved to {out_path}[/green]")
+
+        # Compare against baseline
+        if compare:
+            compare_path = Path(compare)
+            if not compare_path.exists():
+                console.print(f"[red]Baseline file not found: {compare}[/red]")
+                raise typer.Exit(1)
+            baseline = load_results(compare_path)
+            console.print()
+            print_comparison(result, baseline, console)
+
+    finally:
+        if server_proc:
+            console.print("[dim]Stopping auto-started server...[/dim]")
+            server_proc.terminate()
+            server_proc.wait(timeout=5)
 
 
 if __name__ == "__main__":
