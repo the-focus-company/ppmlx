@@ -208,3 +208,39 @@ class ErrorDetail(BaseModel):
 
 class ErrorResponse(BaseModel):
     error: ErrorDetail
+
+
+# ── Tool calling (agent) ─────────────────────────────────────────────────
+
+class FunctionParameters(BaseModel):
+    """JSON Schema for function parameters."""
+    type: Literal["object"] = "object"
+    properties: dict = Field(default_factory=dict)
+    required: list[str] = Field(default_factory=list)
+
+
+class FunctionDefinition(BaseModel):
+    """OpenAI-compatible function definition."""
+    name: str
+    description: str = ""
+    parameters: FunctionParameters = Field(default_factory=FunctionParameters)
+
+
+class ToolDefinition(BaseModel):
+    """OpenAI-compatible tool definition."""
+    type: Literal["function"] = "function"
+    function: FunctionDefinition
+
+
+class ToolCall(BaseModel):
+    """A tool call parsed from model output."""
+    name: str
+    arguments: str  # JSON string
+
+
+class ToolMessage(BaseModel):
+    """Result of a tool execution, fed back to the model."""
+    role: Literal["tool"] = "tool"
+    name: str
+    tool_call_id: str
+    content: str
