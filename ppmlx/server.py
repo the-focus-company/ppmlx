@@ -27,6 +27,26 @@ from ppmlx import __version__
 
 _start_time = time.time()
 
+# Batch mode flag — set via ``set_batch_mode(True)`` before the server starts.
+# When enabled, requests are routed through :class:`ppmlx.batch.BatchEngine`
+# which provides async request queuing and dispatch.
+_batch_mode: bool = False
+
+
+def set_batch_mode(enabled: bool) -> None:
+    """Enable or disable continuous batching mode.
+
+    Must be called before the server starts handling requests.
+    """
+    global _batch_mode
+    _batch_mode = enabled
+    log.info("Batch mode %s", "enabled" if enabled else "disabled")
+
+
+def is_batch_mode() -> bool:
+    """Return whether batch mode is currently enabled."""
+    return _batch_mode
+
 
 _DEFAULT_MAX_BODY_BYTES = 10 * 1024 * 1024  # 10 MB
 _DEFAULT_MAX_TOKENS_CAP = 32_768
@@ -127,6 +147,14 @@ async def lifespan(app: FastAPI):
         await snapshot_task
     except asyncio.CancelledError:
         pass
+
+    # Shut down BatchEngine if it was used
+    if _batch_mode:
+        try:
+            from ppmlx.batch import get_batch_engine
+            await get_batch_engine().shutdown()
+        except Exception:
+            pass
 
     try:
         if app.state.db:
@@ -783,6 +811,56 @@ async def chat_completions(request: Request):
             draft_model=draft_repo_id,
             speculative_tokens=speculative_tokens,
         )
+
+
+def _get_text_stream(repo_id, messages, temperature, top_p, max_tokens, seed, tools):
+    """Return an async iterator of text chunks, using BatchEngine or TextEngine."""
+    if _batch_mode:
+        from ppmlx.batch import get_batch_engine
+        return get_batch_engine().stream_generate(
+            repo_id, messages,
+            temperature=0.7 if temperature is None else temperature,
+            top_p=1.0 if top_p is None else top_p,
+            max_tokens=max_tokens,
+            seed=seed,
+            tools=tools,
+        )
+    from ppmlx.engine import get_engine
+    gen = get_engine().stream_generate(
+        repo_id, messages,
+        temperature=0.7 if temperature is None else temperature,
+        top_p=1.0 if top_p is None else top_p,
+        max_tokens=max_tokens,
+        seed=seed,
+        tools=tools,
+    )
+    return _async_iter_sync_gen(gen)
+
+
+async def _text_generate(repo_id, messages, temperature, top_p, max_tokens, seed,
+                          repetition_penalty, tools):
+    """Run a non-streaming text generation, using BatchEngine or TextEngine."""
+    if _batch_mode:
+        from ppmlx.batch import get_batch_engine
+        return await get_batch_engine().generate(
+            repo_id, messages,
+            temperature=0.7 if temperature is None else temperature,
+            top_p=1.0 if top_p is None else top_p,
+            max_tokens=max_tokens,
+            seed=seed,
+            repetition_penalty=repetition_penalty,
+            tools=tools,
+        )
+    from ppmlx.engine import get_engine
+    return get_engine().generate(
+        repo_id, messages,
+        temperature=0.7 if temperature is None else temperature,
+        top_p=1.0 if top_p is None else top_p,
+        max_tokens=max_tokens,
+        seed=seed,
+        repetition_penalty=repetition_penalty,
+        tools=tools,
+    )
 
 
 def _stream_chat(

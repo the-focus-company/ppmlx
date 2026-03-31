@@ -652,6 +652,7 @@ def serve(
     embed_model: Optional[str] = typer.Option(None, "--embed-model", help="Pre-load an embedding model"),
     no_cors: bool = typer.Option(False, "--no-cors", help="Disable CORS"),
     interactive: bool = typer.Option(False, "--interactive", "-i", help="Interactively select a model to serve"),
+    batch_mode: bool = typer.Option(False, "--batch", help="Enable continuous batching for concurrent requests"),
 ):
     """Start the OpenAI-compatible API server."""
     import uvicorn
@@ -719,6 +720,11 @@ def serve(
         title="Connect your IDE",
         border_style="blue",
     ))
+
+    if batch_mode:
+        from ppmlx.server import set_batch_mode
+        set_batch_mode(True)
+        console.print("[dim]Continuous batching: enabled[/dim]")
 
     if _setproctitle_mod:
         _setproctitle_mod.setproctitle(f"ppmlx: server ({effective_host}:{effective_port})")
