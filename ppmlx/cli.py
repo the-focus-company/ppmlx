@@ -1392,6 +1392,136 @@ def rm(
             console.print(f"[red]Failed to remove {m}[/red]")
 
 
+@app.command(name="alias")
+def add_alias(
+    name: Optional[str] = typer.Argument(None, help="Alias name (e.g. my-model)"),
+    repo: Optional[str] = typer.Argument(None, help="HuggingFace repo ID (e.g. org/model)"),
+):
+    """Add a custom model alias. Interactive when called without arguments."""
+    from ppmlx.models import save_user_alias
+
+    if name is None or repo is None:
+        import questionary
+        from ppmlx.models import list_local_models
+        local_models = list_local_models()
+        if not local_models:
+            console.print("[yellow]No local models found. Run: ppmlx pull <model>[/yellow]")
+            raise typer.Exit(1)
+
+        choices = [
+            questionary.Choice(
+                f"{m['alias']:<24} {m['repo_id']}",
+                value=m["repo_id"],
+            )
+            for m in sorted(local_models, key=lambda x: x["alias"])
+        ]
+        if repo is None:
+            repo = questionary.select(
+                "Select a model to alias:", choices=choices,
+            ).ask()
+            if not repo:
+                raise typer.Exit()
+
+        if name is None:
+            name = questionary.text(
+                "Alias name:",
+                validate=lambda v: True if v.strip() else "Alias cannot be empty",
+            ).ask()
+            if not name:
+                raise typer.Exit()
+            name = name.strip()
+
+    save_user_alias(name, repo)
+    console.print(f"[green]Alias created: [bold]{name}[/bold] -> {repo}[/green]")
+
+
+@app.command()
+def aliases():
+    """Show all model aliases (built-in + custom + registry)."""
+    records = _build_model_records(exclude_embed=False)
+    if not records:
+        console.print("[dim]No aliases configured.[/dim]")
+        return
+    table = _model_table(
+        records,
+        title="Model Aliases",
+        show_repo=True,
+        show_source=True,
+        show_size=False,
+    )
+    console.print(table)
+    try:
+        from ppmlx.registry import registry_meta
+        meta = registry_meta()
+        console.print(f"[dim]Registry: {meta['count']} models, updated {meta['updated']}[/dim]")
+    except Exception:
+        pass
+
+
+@app.command()
+def fav(
+    model: Optional[str] = typer.Argument(None, help="Model alias to add to favorites"),
+):
+    """Add a model to your favorites list."""
+    if not model:
+        model = _pick_model()
+    from ppmlx.models import add_favorite
+    if add_favorite(model):
+        console.print(f"[green]★ Added [bold]{model}[/bold] to favorites[/green]")
+    else:
+        console.print(f"[yellow]{model} is already a favorite.[/yellow]")
+
+
+@app.command()
+def unfav(
+    model: Optional[str] = typer.Argument(None, help="Model alias to remove from favorites"),
+):
+    """Remove a model from your favorites list."""
+    if not model:
+        from ppmlx.models import load_favorites
+        favs = load_favorites()
+        if not favs:
+            console.print("[dim]No favorites set.[/dim]")
+            raise typer.Exit()
+        import questionary
+        choices = [questionary.Choice(f, value=f) for f in favs]
+        selected = questionary.select(
+            "Remove from favorites:", choices=choices,
+        ).ask()
+        if not selected:
+            raise typer.Exit()
+        model = selected
+    from ppmlx.models import remove_favorite
+    if remove_favorite(model):
+        console.print(f"[green]Removed [bold]{model}[/bold] from favorites[/green]")
+    else:
+        console.print(f"[yellow]{model} is not a favorite.[/yellow]")
+
+
+@app.command()
+def favs():
+    """Show your favorite models."""
+    records = _build_model_records(filter_favorites=True)
+    if not records:
+        console.print("[dim]No favorites yet. Add one with: ppmlx fav <model>[/dim]")
+        return
+    table = _model_table(records, title="★ Favorite Models", show_params=True)
+    console.print(table)
+
+
+def _format_duration(seconds: float) -> str:
+    """Format seconds as a human-readable duration (e.g. '2m 30s')."""
+    seconds = max(0, int(seconds))
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes, secs = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m {secs}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h {minutes}m {secs}s"
+
+
+
 @app.command()
 def ps():
     """Show currently loaded models and memory usage."""
@@ -1406,6 +1536,7 @@ def ps():
         response = httpx.get(url, timeout=3.0)
         data = response.json()
         loaded = data.get("loaded_models", [])
+        loaded_info = data.get("loaded_models_info", [])
         uptime = data.get("uptime_seconds", 0)
 
         if not loaded:
@@ -1414,6 +1545,8 @@ def ps():
 
         loaded_set = set(loaded)
         records = _build_model_records()
+        # Build a lookup from loaded_info if available
+        info_by_id = {info["repo_id"]: info for info in loaded_info} if loaded_info else {}
         # Build picker rows for loaded models only
         rows: list[_PickerRow] = []
         for r in records:
@@ -1433,10 +1566,27 @@ def ps():
                 section_header=None, is_loaded=True,
             ))
 
+        # Build TTL summary for footer
+        ttl_parts: list[str] = []
+        for m in loaded:
+            info = info_by_id.get(m, {})
+            idle = _format_duration(info["idle_seconds"]) if "idle_seconds" in info else None
+            ttl = (
+                _format_duration(info["ttl_remaining_seconds"])
+                if "ttl_remaining_seconds" in info
+                else None
+            )
+            if idle or ttl:
+                ttl_parts.append(f"{m}: idle={idle or '-'} ttl={ttl or 'off'}")
+        ttl_footer = " | ".join(ttl_parts) if ttl_parts else ""
+        footer = f"Server uptime: {_format_duration(uptime)}"
+        if ttl_footer:
+            footer += f"  {ttl_footer}"
+
         from ppmlx.tui import browse_models
         browse_models(
             rows, title="Loaded Models", command_str="ppmlx ps",
-            footer_extra=f"Server uptime: {uptime}s",
+            footer_extra=footer,
         )
     except Exception:
         console.print("[yellow]Server not running. Start it with: ppmlx serve[/yellow]")

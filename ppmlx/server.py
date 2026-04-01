@@ -212,6 +212,11 @@ def _clamp_max_tokens(requested: int | None) -> int | None:
         return None
     return min(requested, _MAX_TOKENS_CAP)
 
+# ── API Playground ────────────────────────────────────────────────────
+from ppmlx.api_docs import router as playground_router  # noqa: E402
+
+app.include_router(playground_router)
+
 
 async def _snapshot_loop(interval_seconds: int) -> None:
     """Periodically log system snapshots to the database."""
@@ -607,9 +612,12 @@ async def health(request: Request):
     """Health check endpoint."""
     try:
         from ppmlx.engine import get_engine
-        loaded = get_engine().list_loaded()
+        engine = get_engine()
+        loaded = engine.list_loaded()
+        loaded_info = engine.list_loaded_info()
     except Exception:
         loaded = []
+        loaded_info = []
 
     try:
         from ppmlx.memory import get_system_ram_gb
@@ -628,6 +636,7 @@ async def health(request: Request):
         "status": "ok",
         "version": __version__,
         "loaded_models": loaded,
+        "loaded_models_info": loaded_info,
         "uptime_seconds": int(time.time() - _start_time),
         "system": {
             "memory_total_gb": round(ram_gb, 1),
