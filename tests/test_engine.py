@@ -638,23 +638,28 @@ def test_draft_model_uses_lru_cache():
 # ---------------------------------------------------------------------------
 # 24. Draft model participates in LRU eviction
 # ---------------------------------------------------------------------------
-def test_draft_model_lru_eviction():
-    """With max_loaded=2, loading target + draft fills the cache; loading a
-    third model evicts the LRU entry."""
-    fake, _, _ = _make_fake_mlx_lm(generate_return="ok")
+def test_last_used_at_updated_on_load():
+    """last_used_at is set when a model is loaded."""
+    import time
+    fake, _, _ = _make_fake_mlx_lm()
+    _install_fake(fake)
+
+    from ppmlx.engine import TextEngine, reset_engine
+    reset_engine()
+    engine = TextEngine(max_loaded=2)
+
     before = time.monotonic()
     engine.load("model/a")
     after = time.monotonic()
 
     info = engine.list_loaded_info()
     assert len(info) == 1
-    # last_used_at should be between before and after (within idle_seconds tolerance)
     assert info[0]["idle_seconds"] >= 0
     assert info[0]["idle_seconds"] < (after - before + 1)
 
 
 def test_last_used_at_updated_on_generate():
-    """last_used_at is updated when generate is called (re-load touches it)."""
+    """last_used_at is updated when generate is called."""
     import time
     fake, _, _ = _make_fake_mlx_lm(generate_return="Hello!")
     _install_fake(fake)
@@ -663,22 +668,6 @@ def test_last_used_at_updated_on_generate():
     reset_engine()
     engine = TextEngine(max_loaded=2)
 
-    # Load target and draft (fills cache to 2)
-    engine.generate(
-        "target/model",
-        [{"role": "user", "content": "hi"}],
-        draft_model="draft/model",
-    )
-    assert len(engine.list_loaded()) == 2
-
-    # Loading a third model should evict the LRU
-    engine.load("other/model")
-    loaded = engine.list_loaded()
-    assert len(loaded) == 2
-    assert "other/model" in loaded
-    # target/model was loaded first and not touched after draft, so it might be LRU
-    # depending on access pattern. The key point is the cache respects max_loaded.
-    assert "target/model" not in loaded or "draft/model" not in loaded
     engine.load("model/a")
     time.sleep(0.05)
 
@@ -688,8 +677,31 @@ def test_last_used_at_updated_on_generate():
 
     info = engine.list_loaded_info()
     assert len(info) == 1
-    # idle_seconds should be very small since we just used it
     assert info[0]["idle_seconds"] < (after_gen - before_gen + 1)
+
+
+def test_draft_model_lru_eviction():
+    """With max_loaded=2, loading target + draft fills the cache; loading a
+    third model evicts the LRU entry."""
+    fake, _, _ = _make_fake_mlx_lm(generate_return="ok")
+    _install_fake(fake)
+
+    from ppmlx.engine import TextEngine, reset_engine
+    reset_engine()
+    engine = TextEngine(max_loaded=2)
+
+    engine.generate(
+        "target/model",
+        [{"role": "user", "content": "hi"}],
+        draft_model="draft/model",
+    )
+    assert len(engine.list_loaded()) == 2
+
+    engine.load("other/model")
+    loaded = engine.list_loaded()
+    assert len(loaded) == 2
+    assert "other/model" in loaded
+    assert "target/model" not in loaded or "draft/model" not in loaded
 
 
 def test_reaper_unloads_idle_models():
