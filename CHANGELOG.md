@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-04-07
+
+### Added
+- **Smart model router**: send `model: "auto"` and ppmlx picks the right model
+  - Complexity analysis: scores requests 1-10 based on prompt length, code presence,
+    reasoning keywords, tool count, multi-turn depth, images, and output length
+  - Simple requests (greeting, short questions) → small fast model
+  - Complex requests (architecture, debugging, long code) → large capable model
+  - Configurable via `[router]` in config.toml (threshold, small/large model)
+  - Environment variables: `PPMLX_ROUTER_ENABLED`, `PPMLX_ROUTER_THRESHOLD`,
+    `PPMLX_ROUTER_SMALL_MODEL`, `PPMLX_ROUTER_LARGE_MODEL`
+- `ppmlx/router.py` — `analyze_complexity()` and `route()` functions
+
 ## [0.6.0] - 2026-04-07
 
 ### Added

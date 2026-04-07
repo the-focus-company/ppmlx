@@ -69,6 +69,14 @@ class ThinkingConfig:
 
 
 @dataclass
+class RouterConfig:
+    enabled: bool = False
+    small_model: str = "qwen3.5:0.8b"
+    large_model: str = "qwen3.5:9b"
+    threshold: int = 3  # complexity score at or above which we use large_model
+
+
+@dataclass
 class AnalyticsConfig:
     enabled: bool = False
     provider: str = "posthog"
@@ -86,6 +94,7 @@ class Config:
     registry: RegistryConfig = field(default_factory=RegistryConfig)
     tool_awareness: ToolAwarenessConfig = field(default_factory=ToolAwarenessConfig)
     thinking: ThinkingConfig = field(default_factory=ThinkingConfig)
+    router: RouterConfig = field(default_factory=RouterConfig)
     analytics: AnalyticsConfig = field(default_factory=AnalyticsConfig)
 
 
@@ -193,6 +202,12 @@ def _apply_toml(cfg: Config, data: dict) -> None:
         if "enabled" in th: cfg.thinking.enabled = bool(th["enabled"])
         if "default_reasoning_budget" in th: cfg.thinking.default_reasoning_budget = int(th["default_reasoning_budget"])
         if "effort_base" in th: cfg.thinking.effort_base = int(th["effort_base"])
+    if "router" in data:
+        rt = data["router"]
+        if "enabled" in rt: cfg.router.enabled = bool(rt["enabled"])
+        if "small_model" in rt: cfg.router.small_model = str(rt["small_model"])
+        if "large_model" in rt: cfg.router.large_model = str(rt["large_model"])
+        if "threshold" in rt: cfg.router.threshold = int(rt["threshold"])
     if "analytics" in data:
         an = data["analytics"]
         if "enabled" in an: cfg.analytics.enabled = bool(an["enabled"])
@@ -232,6 +247,10 @@ def _apply_env(cfg: Config) -> None:
         "PPMLX_THINKING_ENABLED": ("thinking", "enabled", _parse_bool),
         "PPMLX_THINKING_BUDGET": ("thinking", "default_reasoning_budget", int),
         "PPMLX_EFFORT_BASE": ("thinking", "effort_base", int),
+        "PPMLX_ROUTER_ENABLED": ("router", "enabled", _parse_bool),
+        "PPMLX_ROUTER_SMALL_MODEL": ("router", "small_model", str),
+        "PPMLX_ROUTER_LARGE_MODEL": ("router", "large_model", str),
+        "PPMLX_ROUTER_THRESHOLD": ("router", "threshold", int),
         "PPMLX_ANALYTICS_ENABLED": ("analytics", "enabled", _parse_bool),
         "PPMLX_ANALYTICS_PROVIDER": ("analytics", "provider", _normalize_analytics_provider),
         "PPMLX_ANALYTICS_HOST": ("analytics", "host", str),

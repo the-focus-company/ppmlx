@@ -816,6 +816,26 @@ async def chat_completions(request: Request):
     draft_model = body.get("draft_model")
     speculative_tokens = body.get("speculative_tokens")
 
+    # Smart router: when model is "auto", analyze request and pick the best model
+    if model_name == "auto" and _cfg and _cfg.router.enabled:
+        try:
+            from ppmlx.router import route as _route
+            from ppmlx.router import RouterConfig as _RC
+            rc = _RC(
+                enabled=True,
+                small_model=_cfg.router.small_model,
+                large_model=_cfg.router.large_model,
+                threshold=_cfg.router.threshold,
+            )
+            decision = _route(messages, rc, tools=tools, max_tokens=max_tokens)
+            model_name = decision.model
+            log.info(
+                "Router: %s (score=%d, %s)",
+                decision.model, decision.complexity_score, decision.reason,
+            )
+        except Exception as exc:
+            log.warning("Router error, falling back to default: %s", exc)
+
     try:
         from ppmlx.models import resolve_alias
         repo_id = resolve_alias(model_name)
