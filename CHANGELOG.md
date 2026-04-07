@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-04-07
+
+### Added
+- **Agent tools**: `search_files` (grep across files), `find_files` (recursive glob), `patch_file` (edit fragment without rewriting whole file)
+- **Delegate tool**: `delegate` sends tasks to Claude Code CLI or Codex CLI asynchronously; `check_task` retrieves results later
+- **Permission levels**: `readonly`, `write`, `execute`, `full` — controls which tools the agent can use, with confirmation prompts on dangerous operations
+- **Agent config in TUI**: `ppmlx config` now has an Agent section — max read lines, max iterations, temperature, sandbox, permission level
+- **`read_file` line ranges**: `start_line`/`end_line` parameters + automatic truncation at configurable `max_read_lines` (default 200)
+- **Voice system prompt**: voice mode auto-injects a conversational system prompt (short answers, progressive disclosure, no markdown)
+- **`[agent]` config section**: `max_read_lines`, `max_iterations`, `temperature`, `sandbox`, `permission_level` in `~/.ppmlx/config.toml`
+
+### Fixed
+- **TTS boundary glitches**: single continuous `OutputStream` replaces per-sentence `sd.play()`; 10ms fade-in/fade-out on each segment
+- **TTS not interruptible**: audio written in 100ms chunks so Ctrl+C fires between them; `_stop` event halts generation thread
+- **STT cutting off speech**: adaptive silence threshold (2× noise floor), grace period (1.0s after silence), increased default `silence_duration` to 2.0s, 300ms trailing buffer in trim
+- **TTS noise/echo**: noise gate (zeros samples <1% of peak), gain capped at 6× to prevent noise amplification
+- **TTS drops inline code**: backtick content now kept as spoken text instead of being stripped
+- **Rich markup crash**: tool output with `[brackets]` escaped before printing
+- **TUI save crash**: `tts_voice = None` no longer written to TOML (was `NoneType is not TOML serializable`)
+- **Ctrl+C everywhere**: works during recording, TTS playback, agent execution, and PTT key wait; double Ctrl+C exits
+
+### Changed
+- Default STT silence_duration: 1.5s → 2.0s
+- Noise floor multiplier: 3× → 2× (less aggressive threshold calibration)
+- TTS speech segments: strategic pauses — 0.25s between sentences, 0.40s between list items, 0.60s between paragraphs
+
 ## [0.8.3] - 2026-04-07
 
 ### Added

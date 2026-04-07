@@ -936,12 +936,16 @@ def agent(
     # Set up agent
     from ppmlx.agent import AgentConfig, AgentRuntime, AgentStep
 
+    from ppmlx.config import load_config as _load_agent_cfg
+    _acfg = _load_agent_cfg().agent
     agent_cfg = AgentConfig(
         model=repo_id,
-        max_iterations=max_iterations,
-        sandbox=sandbox,
-        temperature=temperature or 0.7,
+        max_iterations=max_iterations or _acfg.max_iterations,
+        sandbox=sandbox or _acfg.sandbox,
+        temperature=temperature or _acfg.temperature,
         max_tokens=max_tokens,
+        max_read_lines=_acfg.max_read_lines,
+        permission_level=_acfg.permission_level,
     )
 
     # Set up voice if requested
@@ -983,12 +987,17 @@ def agent(
         console.print(f"  STT: {vcfg.stt_model}")
         console.print(f"  TTS: {vcfg.tts_model}")
 
+    # Voice mode: inject conversational system prompt if user didn't provide one
+    if voice and not system:
+        from ppmlx.agent import VOICE_SYSTEM_PROMPT
+        system = VOICE_SYSTEM_PROMPT
+
     # Display agent info
     from ppmlx.agent import BUILTIN_TOOL_DEFINITIONS
     mode_str = "[red]SANDBOX[/red] " if sandbox else ""
     tool_names = [t["function"]["name"] for t in BUILTIN_TOOL_DEFINITIONS]
     if sandbox:
-        tool_names = [n for n in tool_names if n != "write_file"]
+        tool_names = [n for n in tool_names if n not in ("write_file", "patch_file")]
     tools_str = ", ".join(tool_names)
     console.print(Panel(
         f"[bold green]ppmlx agent[/bold green] {mode_str}\n"
@@ -1013,13 +1022,21 @@ def agent(
                     args = args[:100] + "..."
                 console.print(f"  [yellow]⚡ {name}[/yellow] [dim]{args}[/dim]")
             for tr in step.tool_results:
+                from rich.markup import escape
                 color = "red" if tr.is_error else "green"
                 output = tr.output
                 if len(output) > 200:
                     output = output[:200] + f"... ({len(tr.output)} chars)"
-                console.print(f"  [{color}]→ {output}[/{color}]")
+                console.print(f"  [{color}]→ {escape(output)}[/{color}]")
 
-    runtime = AgentRuntime(config=agent_cfg, on_step=_on_step)
+    # Confirmation callback for dangerous tools (when permission_level allows them)
+    _confirm_cb = None
+    if agent_cfg.permission_level not in ("readonly",):
+        def _confirm_tool(description: str) -> bool:
+            return console.input(f"[yellow]\u26a0 {description}[/yellow] [dim](y/n)[/dim] ").strip().lower() in ("y", "yes", "")
+        _confirm_cb = _confirm_tool
+
+    runtime = AgentRuntime(config=agent_cfg, on_step=_on_step, confirm_callback=_confirm_cb)
 
     # Load UI config for agent REPL
     try:
@@ -1101,6 +1118,8 @@ def agent(
             if voice and voice_out and answer:
                 try:
                     voice_out.speak(answer)
+                except KeyboardInterrupt:
+                    raise
                 except Exception:
                     pass
 

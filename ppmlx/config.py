@@ -83,6 +83,15 @@ class RouterConfig:
 
 
 @dataclass
+class AgentConfig:
+    max_read_lines: int = 200  # max lines returned by read_file when no range given
+    max_iterations: int = 10
+    temperature: float = 0.7
+    sandbox: bool = False
+    permission_level: str = "full"  # "readonly", "write", "execute", "full"
+
+
+@dataclass
 class AnalyticsConfig:
     enabled: bool = False
     provider: str = "posthog"
@@ -120,6 +129,7 @@ class Config:
     ui: UIConfig = field(default_factory=UIConfig)
     router: RouterConfig = field(default_factory=RouterConfig)
     analytics: AnalyticsConfig = field(default_factory=AnalyticsConfig)
+    agent: AgentConfig = field(default_factory=AgentConfig)
     voice: VoiceSettings = field(default_factory=VoiceSettings)
 
 
@@ -253,6 +263,16 @@ def _apply_toml(cfg: Config, data: dict) -> None:
             cfg.analytics.project_api_key = str(an["website_id"]).strip()
         if "respect_do_not_track" in an:
             cfg.analytics.respect_do_not_track = bool(an["respect_do_not_track"])
+    if "agent" in data:
+        ag = data["agent"]
+        if "max_read_lines" in ag: cfg.agent.max_read_lines = int(ag["max_read_lines"])
+        if "max_iterations" in ag: cfg.agent.max_iterations = int(ag["max_iterations"])
+        if "temperature" in ag: cfg.agent.temperature = float(ag["temperature"])
+        if "sandbox" in ag: cfg.agent.sandbox = bool(ag["sandbox"])
+        if "permission_level" in ag:
+            pl = str(ag["permission_level"]).strip().lower()
+            if pl in ("readonly", "write", "execute", "full"):
+                cfg.agent.permission_level = pl
     if "voice" in data:
         v = data["voice"]
         if "stt_model" in v: cfg.voice.stt_model = str(v["stt_model"])

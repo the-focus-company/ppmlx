@@ -31,7 +31,7 @@ class VoiceConfig:
     tts_sample_rate: int = 24000  # Playback sample rate (TTS)
     tts_speed: float = 1.0  # TTS playback speed multiplier
     silence_threshold: float = 0.01  # RMS threshold for silence detection
-    silence_duration: float = 1.5  # Seconds of silence to stop recording
+    silence_duration: float = 2.0  # Seconds of silence to stop recording
     max_record_seconds: float = 30.0  # Maximum recording duration
     tts_volume: float = 1.10  # Target peak level for normalization
     # Push-to-talk: hold ptt_key while speaking, release to transcribe.
@@ -167,7 +167,9 @@ class VoiceInput:
         listener.start()
 
         try:
-            press_event.wait()  # block until key goes down
+            # Loop with timeout so KeyboardInterrupt can fire
+            while not press_event.wait(timeout=0.2):
+                pass
 
             sr = self.config.sample_rate
             chunk_size = int(sr * 0.05)  # 50 ms chunks
@@ -196,7 +198,16 @@ class VoiceInput:
         return result.get("text", "").strip()
 
     def _record_until_silence(self) -> Any:
-        """Record audio until silence is detected."""
+        """Record audio until silence is detected.
+
+        Uses a two-phase approach:
+        1. **Calibration** — measure ambient noise for the first 0.3 s and set
+           the silence threshold to ``max(config.silence_threshold, 3 × noise)``.
+        2. **Adaptive silence duration** — the longer the user speaks, the
+           longer the pause required to end recording (up to 2× the base
+           ``silence_duration``).  This prevents mid-sentence cut-offs during
+           natural thinking pauses.
+        """
         try:
             import sounddevice as sd
             import numpy as np
@@ -207,47 +218,88 @@ class VoiceInput:
             )
 
         sr = self.config.sample_rate
-        chunk_duration = 0.1  # 100ms chunks
+        chunk_duration = 0.1  # 100 ms chunks
         chunk_size = int(sr * chunk_duration)
         max_chunks = int(self.config.max_record_seconds / chunk_duration)
+        calibration_chunks = int(0.3 / chunk_duration)  # 0.3 s calibration
 
         chunks: list[Any] = []
         silent_chunks = 0
         speech_detected = False
-        silence_limit = int(self.config.silence_duration / chunk_duration)
+        speech_chunks = 0  # how many chunks contained speech
 
-        log.debug("Recording... (silence threshold=%.3f, max=%.0fs)",
-                  self.config.silence_threshold, self.config.max_record_seconds)
+        base_silence_limit = int(self.config.silence_duration / chunk_duration)
+
+        # --- Phase 1: calibrate noise floor ---
+        noise_rms_values: list[float] = []
+        log.debug(
+            "Calibrating noise floor (%.1fs)…", calibration_chunks * chunk_duration
+        )
 
         try:
-            with sd.InputStream(samplerate=sr, channels=1, dtype="float32",
-                                blocksize=chunk_size) as stream:
-                for _ in range(max_chunks):
+            with sd.InputStream(
+                samplerate=sr, channels=1, dtype="float32", blocksize=chunk_size
+            ) as stream:
+                # Calibration: record a few chunks to measure ambient noise
+                for _ in range(calibration_chunks):
+                    data, _ = stream.read(chunk_size)
+                    chunks.append(data.copy())
+                    rms = float(np.sqrt(np.mean(data ** 2)))
+                    noise_rms_values.append(rms)
+
+                noise_floor = float(np.mean(noise_rms_values)) if noise_rms_values else 0.0
+                threshold = max(self.config.silence_threshold, noise_floor * 2.0)
+                log.debug(
+                    "Noise floor=%.5f → threshold=%.5f (config=%.5f)",
+                    noise_floor, threshold, self.config.silence_threshold,
+                )
+
+                # --- Phase 2: record until silence ---
+                grace_chunks = int(1.0 / chunk_duration)  # 1.0 s grace after silence
+                grace_remaining = -1  # -1 = not in grace period
+
+                for _ in range(max_chunks - calibration_chunks):
                     data, _ = stream.read(chunk_size)
                     chunks.append(data.copy())
 
-                    # Check for silence
                     rms = float(np.sqrt(np.mean(data ** 2)))
-                    if rms < self.config.silence_threshold:
+                    if rms < threshold:
                         silent_chunks += 1
-                        # Only stop on silence AFTER speech was detected
-                        if speech_detected and silent_chunks >= silence_limit:
-                            break
+                        # Adaptive: more speech → require longer silence to stop
+                        # Ramps from 1× to 2× base limit over 10 s of speech
+                        adapt = min(2.0, 1.0 + speech_chunks / (10.0 / chunk_duration))
+                        cur_limit = int(base_silence_limit * adapt)
+                        if speech_detected and silent_chunks >= cur_limit:
+                            if grace_remaining < 0:
+                                # Start grace period — keep recording a bit longer
+                                grace_remaining = grace_chunks
+                                log.debug(
+                                    "Silence detected, grace period %.1fs",
+                                    grace_chunks * chunk_duration,
+                                )
+                            grace_remaining -= 1
+                            if grace_remaining <= 0:
+                                log.debug(
+                                    "Silence stop after %d speech chunks "
+                                    "(limit=%d, adapt=%.2f)",
+                                    speech_chunks, cur_limit, adapt,
+                                )
+                                break
                     else:
                         silent_chunks = 0
+                        grace_remaining = -1  # speech resumed — cancel grace
                         if not speech_detected:
                             speech_detected = True
-                            log.debug("Speech detected (RMS=%.4f)", rms)
+                            log.debug("Speech detected (RMS=%.5f, threshold=%.5f)", rms, threshold)
+                        speech_chunks += 1
         except KeyboardInterrupt:
-            pass
+            raise
 
         if not speech_detected:
             return None
-
         if not chunks:
             return None
 
-        import numpy as np
         return np.concatenate(chunks, axis=0).flatten()
 
     def _trim_silence(self, audio: Any) -> Any:
@@ -269,7 +321,7 @@ class VoiceInput:
         for i in range(len(audio) - frame_len, start, -frame_len):
             rms = float(np.sqrt(np.mean(audio[i:i + frame_len] ** 2)))
             if rms >= threshold:
-                end = min(len(audio), i + 2 * frame_len)
+                end = min(len(audio), i + 6 * frame_len)  # keep 300ms trailing
                 break
         return audio[start:end]
 
@@ -342,16 +394,27 @@ class VoiceOutput:
             )
 
     def _normalize_audio(self, audio: Any) -> Any:
-        """Normalize audio to target peak level and remove DC offset."""
+        """Normalize audio: DC removal, noise gate, and peak normalization.
+
+        Limits gain to 6× to prevent amplifying noise when the source
+        signal is very quiet.  A simple noise gate zeros out samples
+        below 1% of peak to reduce background hiss.
+        """
         import numpy as np
         a = np.asarray(audio, dtype=np.float32)
         # Remove DC offset
         a = a - np.mean(a)
-        # Normalize to target peak
         peak = np.max(np.abs(a))
+        if peak < 1e-6:
+            return a
+        # Noise gate — zero out samples below 1% of peak
+        gate_thresh = peak * 0.01
+        a[np.abs(a) < gate_thresh] = 0.0
+        # Normalize to target peak, but cap gain at 6× to avoid
+        # amplifying noise on very quiet segments
         target = self.config.tts_volume
-        if peak > 1e-6:
-            a = a * (target / peak)
+        gain = min(target / peak, 6.0)
+        a = a * gain
         return a
 
     @staticmethod
@@ -360,8 +423,8 @@ class VoiceOutput:
         import re
         # Remove code blocks
         text = re.sub(r"```[\s\S]*?```", "", text)
-        # Remove inline code
-        text = re.sub(r"`[^`]+`", "", text)
+        # Remove inline code backticks but keep the text inside
+        text = re.sub(r"`([^`]+)`", r"\1", text)
         # Remove markdown links, keep text: [text](url) → text
         text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
         # Remove markdown headers
@@ -378,12 +441,54 @@ class VoiceOutput:
         return text.strip()
 
     @staticmethod
-    def _split_sentences(text: str) -> list[str]:
-        """Split text into sentences for incremental TTS."""
+    def _parse_speech_segments(text: str) -> list[tuple[str, float]]:
+        """Parse text into speech segments with strategic pauses.
+
+        Returns a list of ``(text_to_speak, pause_after_seconds)`` tuples.
+        Empty *text_to_speak* with a positive pause inserts pure silence
+        (e.g. between paragraphs).
+
+        Pause heuristics
+        ----------------
+        - Sentence boundary:   0.25 s
+        - List item:           0.40 s
+        - Paragraph break:     0.60 s
+        """
         import re
-        # Split on sentence-ending punctuation followed by space or end
-        parts = re.split(r'(?<=[.!?])\s+', text.strip())
-        return [s for s in parts if s.strip()]
+
+        segments: list[tuple[str, float]] = []
+        paragraphs = re.split(r"\n\s*\n", text.strip())
+
+        for p_idx, para in enumerate(paragraphs):
+            para = para.strip()
+            if not para:
+                continue
+
+            lines = para.split("\n")
+            # Detect if the whole paragraph is a list
+            non_empty = [ln for ln in lines if ln.strip()]
+            is_list = bool(non_empty) and all(
+                re.match(r"^\s*[-*+•]\s|^\s*\d+[.)]\s", ln) for ln in non_empty
+            )
+
+            if is_list:
+                for ln in non_empty:
+                    ln = re.sub(r"^\s*[-*+•]\s+|^\s*\d+[.)]\s+", "", ln).strip()
+                    if ln:
+                        segments.append((ln, 0.40))
+            else:
+                # Split paragraph into sentences
+                sentences = re.split(r"(?<=[.!?])\s+", para)
+                for sentence in sentences:
+                    sentence = sentence.strip()
+                    if sentence:
+                        segments.append((sentence, 0.25))
+
+            # Add a paragraph-break pause (except after the last paragraph)
+            if p_idx < len(paragraphs) - 1:
+                segments.append(("", 0.60))
+
+        return segments
 
     def _generate_audio(self, text: str) -> tuple[Any, int] | None:
         """Generate speech for a text chunk. Returns (audio_np, sample_rate) or None."""
@@ -404,46 +509,135 @@ class VoiceOutput:
         playback_sr = int(sr * self.config.tts_speed)
         return audio, playback_sr
 
+    @staticmethod
+    def _fade_edges(audio: "Any", sr: int, fade_ms: float = 10.0) -> "Any":
+        """Apply fade-in and fade-out to an audio array to prevent clicks."""
+        import numpy as np
+        n = min(int(sr * fade_ms / 1000.0), len(audio) // 2)
+        if n > 0:
+            ramp = np.linspace(0.0, 1.0, n, dtype=np.float32)
+            audio[:n] *= ramp
+            audio[-n:] *= ramp[::-1]
+        return audio
+
     def speak(self, text: str) -> None:
-        """Generate speech sentence by sentence, overlapping generation and playback."""
+        """Generate and play speech through a single continuous audio stream.
+
+        A worker thread pre-generates audio segments into a bounded queue.
+        The main thread writes them into one persistent ``OutputStream`` —
+        no device open/close between sentences, so no boundary clicks.
+        Silence gaps for pauses are written as zero-arrays into the same
+        stream.
+        """
         self._load_tts()
         try:
             import sounddevice as sd
+            import numpy as np
         except ImportError:
             raise ImportError(
                 "sounddevice is required for audio playback. "
                 "Install with: brew install portaudio && pip install sounddevice"
             )
+        from queue import Queue
 
         text = self.clean_text_for_speech(text)
         if not text:
             return
 
-        sentences = self._split_sentences(text)
-        if not sentences:
+        segments = self._parse_speech_segments(text)
+        if not segments:
             return
 
-        # Generate first sentence synchronously
-        result = self._generate_audio(sentences[0])
-        if result is None:
+        _SENTINEL = object()
+        audio_q: Queue = Queue(maxsize=4)
+        _stop = threading.Event()
+
+        def _gen_worker() -> None:
+            for seg_text, pause in segments:
+                if _stop.is_set():
+                    break
+                if seg_text:
+                    try:
+                        result = self._generate_audio(seg_text)
+                    except Exception:
+                        result = None
+                    if _stop.is_set():
+                        break
+                    if result is not None:
+                        audio, sr = result
+                        audio = self._fade_edges(audio, sr)
+                        audio_q.put((audio, sr, pause))
+                    else:
+                        if pause > 0:
+                            audio_q.put((None, 0, pause))
+                elif pause > 0:
+                    audio_q.put((None, 0, pause))
+            audio_q.put(_SENTINEL)
+
+        worker = threading.Thread(target=_gen_worker, daemon=True)
+        worker.start()
+
+        # Determine sample rate from the first real segment
+        first = audio_q.get()
+        if first is _SENTINEL:
+            worker.join(timeout=5)
             return
 
-        for i in range(len(sentences)):
-            audio, sr = result  # type: ignore[misc]
+        first_audio, out_sr, first_pause = first
+        if first_audio is None:
+            # First item was a pure pause — pick default sr
+            out_sr = int(self.config.tts_sample_rate * self.config.tts_speed)
 
-            # Start playback of current sentence
-            sd.play(audio, samplerate=sr)
+        # Write audio in small chunks so KeyboardInterrupt can fire between them
+        write_chunk = int(out_sr * 0.1)  # 100 ms per write call
 
-            # Generate next sentence in parallel while audio plays
-            next_result = None
-            if i + 1 < len(sentences):
-                next_result = self._generate_audio(sentences[i + 1])
+        def _chunked_write(stream: Any, data: "Any") -> None:
+            """Write *data* to *stream* in ≤100 ms slices, checking _stop."""
+            flat = data.reshape(-1, 1) if data.ndim == 1 else data
+            for pos in range(0, len(flat), write_chunk):
+                if _stop.is_set():
+                    return
+                stream.write(flat[pos : pos + write_chunk])
 
-            # Wait for current playback to finish
-            sd.wait()
-            result = next_result
-            if result is None and i + 1 < len(sentences):
-                break
+        try:
+            with sd.OutputStream(
+                samplerate=out_sr,
+                channels=1,
+                dtype="float32",
+                latency="high",
+            ) as stream:
+                # Write the first item
+                if first_audio is not None:
+                    _chunked_write(stream, first_audio)
+                if first_pause > 0:
+                    silence = np.zeros(int(out_sr * first_pause), dtype=np.float32)
+                    _chunked_write(stream, silence)
+
+                # Stream remaining segments
+                while not _stop.is_set():
+                    item = audio_q.get()
+                    if item is _SENTINEL:
+                        break
+                    audio, sr, pause = item
+                    if audio is not None:
+                        # Resample if this segment has a different rate
+                        if sr != out_sr and sr > 0:
+                            indices = np.linspace(
+                                0, len(audio) - 1,
+                                int(len(audio) * out_sr / sr),
+                                dtype=np.float32,
+                            )
+                            audio = np.interp(indices, np.arange(len(audio)), audio).astype(np.float32)
+                        _chunked_write(stream, audio)
+                    if pause > 0 and not _stop.is_set():
+                        silence = np.zeros(int(out_sr * pause), dtype=np.float32)
+                        _chunked_write(stream, silence)
+        except KeyboardInterrupt:
+            _stop.set()
+            raise
+        finally:
+            _stop.set()
+            worker.join(timeout=5)
 
     def save(self, text: str, path: str | Path) -> Path:
         """Generate speech and save to a WAV file."""

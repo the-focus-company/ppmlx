@@ -85,6 +85,21 @@ def config_menu() -> None:
     cur_logging = data.get("logging", {}).get("enabled", True)
     cur_analytics = data.get("analytics", {}).get("enabled", False)
 
+    # Agent settings
+    agent_data = data.get("agent", {})
+    max_read_lines_options = [50, 100, 200, 500, 1000]
+    cur_max_read_lines = agent_data.get("max_read_lines", 200)
+    max_read_lines_options = _ensure_in(max_read_lines_options, cur_max_read_lines)
+    agent_max_iter_options = [3, 5, 10, 15, 20, 30]
+    cur_agent_max_iter = agent_data.get("max_iterations", 10)
+    agent_max_iter_options = _ensure_in(agent_max_iter_options, cur_agent_max_iter)
+    agent_temp_options = [0.0, 0.1, 0.2, 0.3, 0.5, 0.7, 1.0, 1.5]
+    cur_agent_temp = agent_data.get("temperature", 0.7)
+    agent_temp_options = _ensure_in(agent_temp_options, cur_agent_temp)
+    cur_agent_sandbox = agent_data.get("sandbox", False)
+    permission_levels = ["readonly", "write", "execute", "full"]
+    cur_permission = agent_data.get("permission_level", "full")
+
     # Voice settings
     voice = data.get("voice", {})
     cur_stt_model = voice.get("stt_model", "mlx-community/whisper-large-v3-turbo-q4")
@@ -160,6 +175,20 @@ def config_menu() -> None:
               refresh_modes,
               {"always": "Always", "weekly": "Weekly", "monthly": "Monthly", "never": "Never"}),
 
+        _Group("Agent"),
+        _Item("max_read_lines", "Max Read Lines", "cycle",
+              max_read_lines_options,
+              {v: f"{v} lines" for v in max_read_lines_options}),
+        _Item("agent_max_iterations", "Max Iterations", "cycle",
+              agent_max_iter_options),
+        _Item("agent_temperature", "Temperature", "cycle",
+              agent_temp_options),
+        _Item("agent_sandbox", "Sandbox", "toggle",
+              labels={True: "Enabled", False: "Disabled"}),
+        _Item("agent_permission", "Permission Level", "cycle",
+              permission_levels,
+              {"readonly": "Read Only", "write": "Read + Write", "execute": "Read + Write + Execute", "full": "Full (with confirmation)"}),
+
         _Group("Voice"),
         _Item("stt_model", "STT Model", "text"),
         _Item("tts_model", "TTS Model", "text"),
@@ -207,6 +236,11 @@ def config_menu() -> None:
         "thinking": cur_thinking,
         "budget": budget_options.index(cur_budget),
         "effort_base": effort_base_options.index(cur_effort),
+        "max_read_lines": max_read_lines_options.index(cur_max_read_lines),
+        "agent_max_iterations": agent_max_iter_options.index(cur_agent_max_iter),
+        "agent_temperature": agent_temp_options.index(cur_agent_temp),
+        "agent_sandbox": cur_agent_sandbox,
+        "agent_permission": permission_levels.index(cur_permission) if cur_permission in permission_levels else 3,
         "reg_enabled": cur_reg_enabled,
         "refresh": refresh_modes.index(cur_refresh),
         "stt_model": cur_stt_model,
@@ -327,12 +361,20 @@ def config_menu() -> None:
         data.setdefault("thinking", {})["enabled"] = state["thinking"]
         data["thinking"]["default_reasoning_budget"] = budget_options[state["budget"]]
         data["thinking"]["effort_base"] = effort_base_options[state["effort_base"]]
+        data.setdefault("agent", {})["max_read_lines"] = max_read_lines_options[state["max_read_lines"]]
+        data["agent"]["max_iterations"] = agent_max_iter_options[state["agent_max_iterations"]]
+        data["agent"]["temperature"] = agent_temp_options[state["agent_temperature"]]
+        data["agent"]["sandbox"] = state["agent_sandbox"]
+        data["agent"]["permission_level"] = permission_levels[state["agent_permission"]]
         data.setdefault("registry", {})["enabled"] = state["reg_enabled"]
         data["registry"]["refresh"] = refresh_modes[state["refresh"]]
         v = data.setdefault("voice", {})
         v["stt_model"] = state["stt_model"]
         v["tts_model"] = state["tts_model"]
-        v["tts_voice"] = state["tts_voice"] or None
+        if state["tts_voice"]:
+            v["tts_voice"] = state["tts_voice"]
+        else:
+            v.pop("tts_voice", None)
         v["tts_speed"] = tts_speed_options[state["tts_speed"]]
         v["tts_volume"] = tts_volume_options[state["tts_volume"]]
         v["ptt_mode"] = state["ptt_mode"]
