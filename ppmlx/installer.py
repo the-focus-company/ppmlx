@@ -86,9 +86,41 @@ def _brew_installed(formula: str) -> bool:
         return False
 
 
-def _run_pip(args: list[str], timeout: int = 300) -> bool:
+def _pip_install(packages: list[str], timeout: int = 300) -> bool:
+    """Install pip packages, using uv when available."""
+    import os
+    import shutil
+
+    venv = str(__import__("pathlib").Path(sys.executable).parent.parent)
+
+    if shutil.which("uv"):
+        env = {**os.environ, "VIRTUAL_ENV": venv}
+        r = subprocess.run(["uv", "pip", "install"] + packages, env=env, timeout=timeout)
+        if r.returncode == 0:
+            return True
+
     return subprocess.run(
-        [sys.executable, "-m", "pip"] + args, timeout=timeout,
+        [sys.executable, "-m", "pip", "install", "--quiet"] + packages,
+        timeout=timeout,
+    ).returncode == 0
+
+
+def _pip_uninstall(package_names: list[str], timeout: int = 300) -> bool:
+    """Uninstall pip packages, using uv when available."""
+    import os
+    import shutil
+
+    venv = str(__import__("pathlib").Path(sys.executable).parent.parent)
+
+    if shutil.which("uv"):
+        env = {**os.environ, "VIRTUAL_ENV": venv}
+        r = subprocess.run(["uv", "pip", "uninstall"] + package_names, env=env, timeout=timeout)
+        if r.returncode == 0:
+            return True
+
+    return subprocess.run(
+        [sys.executable, "-m", "pip", "uninstall", "--yes"] + package_names,
+        timeout=timeout,
     ).returncode == 0
 
 
@@ -99,12 +131,12 @@ def _install(comp: Component) -> bool:
         if not _brew_installed(formula):
             if subprocess.run(["brew", "install", formula], timeout=120).returncode != 0:
                 return False
-    return _run_pip(["install", "--quiet"] + comp.packages)
+    return _pip_install(comp.packages)
 
 
 def _uninstall(comp: Component) -> bool:
     names = [p.split(">=")[0].split("==")[0].split("<")[0].strip() for p in comp.packages]
-    return _run_pip(["uninstall", "--yes"] + names)
+    return _pip_uninstall(names)
 
 
 def install_component(key: str) -> bool:

@@ -619,6 +619,25 @@ def addons(
     addons_tui()
 
 
+@app.command(name="install", hidden=True)
+def install_deprecated(
+    component: Optional[str] = typer.Argument(None),
+    remove: bool = typer.Option(False, "--remove", "-r"),
+    status: bool = typer.Option(False, "--status", "-s"),
+):
+    """Deprecated: use 'ppmlx addons' instead."""
+    _deprecated("install", "addons")
+    from ppmlx.installer import install_component, uninstall_component, addons_tui
+    if status:
+        from ppmlx.installer import _print_status_plain, COMPONENTS, _is_installed
+        _print_status_plain(COMPONENTS, [_is_installed(c) for c in COMPONENTS])
+        return
+    if component:
+        ok = (uninstall_component if remove else install_component)(component)
+        raise typer.Exit(0 if ok else 1)
+    addons_tui()
+
+
 @app.command()
 def launch(
     action: Optional[str] = typer.Argument(None, help="Action: run, serve, claude, codex, opencode, openwebui, pi"),
