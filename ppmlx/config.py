@@ -30,6 +30,7 @@ class DefaultsConfig:
     draft_model: str | None = None
     speculative_tokens: int = 5
     auto_speculative: bool = False  # auto-detect draft models for speculative decoding
+    prompt_cache_limit: int = 4    # max prompt KV-cache entries (0 = disabled)
 
 
 @dataclass
@@ -170,6 +171,7 @@ def _apply_toml(cfg: Config, data: dict) -> None:
         if "draft_model" in d: cfg.defaults.draft_model = str(d["draft_model"]) if d["draft_model"] else None
         if "speculative_tokens" in d: cfg.defaults.speculative_tokens = int(d["speculative_tokens"])
         if "auto_speculative" in d: cfg.defaults.auto_speculative = bool(d["auto_speculative"])
+        if "prompt_cache_limit" in d: cfg.defaults.prompt_cache_limit = int(d["prompt_cache_limit"])
     if "logging" in data:
         lg = data["logging"]
         if "enabled" in lg: cfg.logging.enabled = bool(lg["enabled"])
@@ -220,6 +222,7 @@ def _apply_env(cfg: Config) -> None:
         "PPMLX_DRAFT_MODEL": ("defaults", "draft_model", str),
         "PPMLX_SPECULATIVE_TOKENS": ("defaults", "speculative_tokens", int),
         "PPMLX_AUTO_SPECULATIVE": ("defaults", "auto_speculative", _parse_bool),
+        "PPMLX_PROMPT_CACHE_LIMIT": ("defaults", "prompt_cache_limit", int),
         "PPMLX_LOG_ENABLED": ("logging", "enabled", _parse_bool),
         "PPMLX_LOG_SNAPSHOT_INTERVAL": ("logging", "snapshot_interval_seconds", int),
         "PPMLX_MEMORY_WIRED_LIMIT": ("memory", "wired_limit_mb", int),
@@ -260,6 +263,7 @@ def _apply_cli(cfg: Config, overrides: dict) -> None:
         elif key == "draft_model": cfg.defaults.draft_model = str(val) if val else None
         elif key == "speculative_tokens": cfg.defaults.speculative_tokens = int(val)
         elif key == "auto_speculative": cfg.defaults.auto_speculative = bool(val)
+        elif key == "prompt_cache_limit": cfg.defaults.prompt_cache_limit = int(val)
 
 
 def check_first_run() -> None:

@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-04-07
+
+### Added
+- **Prompt caching**: KV-cache reuse across requests with shared prefixes
+  - Automatic prefix matching — system prompts prefilled once, reused for every request
+  - Conversation continuation — each turn reuses the full prefix from the previous turn
+  - LRU eviction with configurable `prompt_cache_limit` (default: 4 entries)
+  - Transparent to API — no client changes needed, works with all endpoints
+  - Disabled automatically when speculative decoding is active
+- `prompt_cache_limit` config option (`[defaults]`, env `PPMLX_PROMPT_CACHE_LIMIT`)
+- `ppmlx/prompt_cache.py` — thread-safe `PromptCacheStore` with prefix matching
+- Prompt cache cleared on model unload (prevents stale KV states)
+
 ## [0.5.0] - 2026-04-07
 
 ### Added
