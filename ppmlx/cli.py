@@ -988,6 +988,18 @@ def agent(
 
     runtime = AgentRuntime(config=agent_cfg, on_step=_on_step)
 
+    # Load UI config for agent REPL
+    try:
+        from ppmlx.config import load_config as _lc2
+        _ui2 = _lc2().ui
+        _agent_show_stats = _ui2.show_stats
+        _agent_markdown = _ui2.markdown
+    except Exception:
+        _agent_show_stats = False
+        _agent_markdown = False
+
+    from ppmlx.render import print_response
+
     # REPL loop
     while True:
         try:
@@ -1011,7 +1023,13 @@ def agent(
             answer, steps = runtime.run(user_input, system_prompt=system)
 
             # Display answer
-            console.print(f"\n[bold green]Agent:[/bold green] {answer}")
+            import time as _agtime
+            print_response(
+                answer,
+                console=console,
+                markdown=_agent_markdown,
+                prefix="\n[bold green]Agent:[/bold green] ",
+            )
 
             # Speak the answer
             if voice and voice_out and answer:
@@ -1072,12 +1090,23 @@ def run(
     if system:
         messages.append({"role": "system", "content": system})
 
+    # Load UI config
+    try:
+        from ppmlx.config import load_config as _lc
+        _ui = _lc().ui
+        _show_stats_default = _ui.show_stats
+        _markdown_default = _ui.markdown
+    except Exception:
+        _show_stats_default = False
+        _markdown_default = False
+
     # Session state
     history_enabled = True
     wordwrap = True
-    verbose = False
+    verbose = _show_stats_default
     format_json = False
     think = False
+    use_markdown = _markdown_default
 
     from prompt_toolkit import PromptSession
     from prompt_toolkit.history import InMemoryHistory
@@ -1086,6 +1115,27 @@ def run(
     from prompt_toolkit.filters import emacs_insert_mode
 
     _kb = KeyBindings()
+
+    # ── macOS Option+letter → diacritical characters ─────────────────────
+    # On macOS, Option+letter produces a Unicode character directly via the
+    # system input method (e.g. Option+a → ą, Option+n → ń in Polish layout).
+    # prompt_toolkit receives these as regular printable characters, so no
+    # explicit mapping is needed — they work out of the box when the terminal
+    # and shell are configured for UTF-8.
+    # The bindings below cover Polish characters for terminals that send
+    # escape sequences instead (e.g. Option+a → ESC a on some configs).
+    _POLISH_OPTION: dict[str, str] = {
+        "a": "ą", "c": "ć", "e": "ę", "l": "ł", "n": "ń",
+        "o": "ó", "s": "ś", "x": "ź", "z": "ż",
+        "A": "Ą", "C": "Ć", "E": "Ę", "L": "Ł", "N": "Ń",
+        "O": "Ó", "S": "Ś", "X": "Ź", "Z": "Ż",
+    }
+    for _latin, _diacritic in _POLISH_OPTION.items():
+        def _make_insert(ch: str):
+            def _insert(event):
+                event.current_buffer.insert_text(ch)
+            return _insert
+        _kb.add("escape", _latin)(_make_insert(_diacritic))
 
     @_kb.add("c-left")   # Ctrl+Left  — jump word left
     @_kb.add("escape", "b")  # Alt/Option+B
@@ -1245,12 +1295,18 @@ def run(
             elif sub == "noformat":
                 format_json = False
                 console.print("[dim]Formatting disabled.[/dim]")
-            elif sub == "verbose":
+            elif sub in ("verbose", "stats"):
                 verbose = True
-                console.print("[dim]Verbose mode enabled.[/dim]")
-            elif sub == "quiet":
+                console.print("[dim]Stats enabled.[/dim]")
+            elif sub in ("quiet", "nostats"):
                 verbose = False
-                console.print("[dim]Quiet mode enabled.[/dim]")
+                console.print("[dim]Stats disabled.[/dim]")
+            elif sub == "markdown":
+                use_markdown = True
+                console.print("[dim]Markdown rendering enabled.[/dim]")
+            elif sub == "nomarkdown":
+                use_markdown = False
+                console.print("[dim]Markdown rendering disabled.[/dim]")
             elif sub == "think":
                 think = True
                 console.print("[dim]Thinking enabled.[/dim]")
@@ -1426,7 +1482,7 @@ def run(
                 else:
                     send_msgs.insert(0, {"role": "system", "content": "Respond only with valid JSON."})
 
-            console.print("[bold green]Assistant:[/bold green] ", end="")
+            from ppmlx.render import stream_and_collect, print_response
             full_response = ""
             try:
                 if image_paths:
@@ -1440,68 +1496,31 @@ def run(
                         max_tokens=max_tokens or 2048,
                     )
                     elapsed = _time.monotonic() - t0
-                    console.print(text, no_wrap=not wordwrap)
+                    print_response(text, console=console,
+                                   markdown=use_markdown,
+                                   prefix="\n[bold green]Assistant:[/bold green] ")
                     full_response = text
                     if verbose:
                         tps = completion_toks / elapsed if elapsed > 0 else 0
                         console.print(
-                            f"[dim]prompt {prompt_toks} tokens  "
-                            f"completion {completion_toks} tokens  "
-                            f"{tps:.1f} tok/s  {elapsed:.2f}s[/dim]"
+                            f"[dim]  ·  {tps:.1f} tok/s · {completion_toks} tokens "
+                            f"· {elapsed:.1f}s[/dim]"
                         )
-                elif verbose:
-                    import time as _time
-                    t0 = _time.monotonic()
-                    text, reasoning, prompt_toks, completion_toks = engine.generate(
-                        repo_id, send_msgs,
-                        temperature=temperature or 0.7,
-                        max_tokens=max_tokens or 2048,
-                        strip_thinking=not think,
-                        enable_thinking=think,
-                    )
-                    elapsed = _time.monotonic() - t0
-                    if think and reasoning:
-                        console.print()
-                        console.print(f"[dim italic]{reasoning}[/dim italic]")
-                        console.print()
-                    console.print(text, no_wrap=not wordwrap)
-                    full_response = text
-                    tps = completion_toks / elapsed if elapsed > 0 else 0
-                    console.print(
-                        f"[dim]prompt {prompt_toks} tokens  "
-                        f"completion {completion_toks} tokens  "
-                        f"{tps:.1f} tok/s  {elapsed:.2f}s[/dim]"
-                    )
                 else:
-                    # Streaming with think-tag handling
-                    in_think = False
-                    for chunk in engine.stream_generate(
+                    # Streaming — unified stats + markdown path
+                    gen = engine.stream_generate(
                         repo_id, send_msgs,
                         temperature=temperature or 0.7,
                         max_tokens=max_tokens or 2048,
                         enable_thinking=think,
-                    ):
-                        if "<think>" in chunk and not in_think:
-                            before, _, after = chunk.partition("<think>")
-                            if before:
-                                console.print(before, end="")
-                                full_response += before
-                            in_think = True
-                            chunk = after
-                        if "</think>" in chunk and in_think:
-                            inside, _, after = chunk.partition("</think>")
-                            if think and inside:
-                                console.print(f"[dim italic]{inside}[/dim italic]", end="")
-                            in_think = False
-                            chunk = after
-                        if chunk:
-                            if in_think:
-                                if think:
-                                    console.print(chunk, end="", style="dim italic")
-                            else:
-                                console.print(chunk, end="")
-                                full_response += chunk
-                    console.print()
+                    )
+                    full_response, _ = stream_and_collect(
+                        gen,
+                        console=console,
+                        markdown=use_markdown,
+                        show_stats=verbose,
+                        prefix="\n[bold green]Assistant:[/bold green] ",
+                    )
             except KeyboardInterrupt:
                 console.print("\n[dim]Generation interrupted.[/dim]")
                 if history_enabled:

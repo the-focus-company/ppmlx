@@ -5,7 +5,12 @@ import platform
 import threading
 from typing import Any
 
-from posthog import Posthog
+try:
+    from posthog import Posthog as _Posthog
+except ImportError:
+    _Posthog = None  # type: ignore[assignment]
+
+Posthog = _Posthog
 
 from ppmlx import __version__
 
@@ -91,6 +96,8 @@ def _get_client(host: str, project_api_key: str) -> Posthog:
         if cached and cached[0] == host and cached[1] == project_api_key:
             return cached[2]
 
+        if Posthog is None:
+            return None
         client = Posthog(
             project_api_key,
             host=host,

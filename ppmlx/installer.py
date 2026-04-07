@@ -36,6 +36,24 @@ class Component:
 
 COMPONENTS: list[Component] = [
     Component(
+        key="vision",
+        label="Vision / Multimodal",
+        description="Image understanding with vision-language models (VLMs)",
+        packages=["mlx-vlm>=0.1.18"],
+        check_imports=["mlx_vlm"],
+        size_hint="~500 MB",
+        extras_key="vision",
+    ),
+    Component(
+        key="embeddings",
+        label="Embeddings",
+        description="Local text embedding models (semantic search, RAG)",
+        packages=["mlx-embeddings>=0.0.5"],
+        check_imports=["mlx_embeddings"],
+        size_hint="~200 MB",
+        extras_key="embeddings",
+    ),
+    Component(
         key="voice",
         label="Voice I/O",
         description="Push-to-talk input (Whisper STT) + spoken output (Voxtral TTS)",
@@ -46,13 +64,13 @@ COMPONENTS: list[Component] = [
         requires_brew=["portaudio"],
     ),
     Component(
-        key="embeddings",
-        label="Embeddings",
-        description="Local text embedding models (semantic search, RAG)",
-        packages=["mlx-embeddings>=0.0.5"],
-        check_imports=["mlx_embeddings"],
-        size_hint="~200 MB",
-        extras_key="embeddings",
+        key="analytics",
+        label="Analytics",
+        description="Anonymous usage statistics (opt-in)",
+        packages=["posthog>=7.9,<8"],
+        check_imports=["posthog"],
+        size_hint="~200 KB",
+        extras_key="analytics",
     ),
 ]
 

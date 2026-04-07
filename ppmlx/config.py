@@ -34,6 +34,12 @@ class DefaultsConfig:
 
 
 @dataclass
+class UIConfig:
+    show_stats: bool = False     # show TTFT / tok/s after each response
+    markdown: bool = False       # render markdown in assistant output
+
+
+@dataclass
 class LoggingConfig:
     enabled: bool = True
     snapshot_interval_seconds: int = 60
@@ -94,6 +100,7 @@ class Config:
     registry: RegistryConfig = field(default_factory=RegistryConfig)
     tool_awareness: ToolAwarenessConfig = field(default_factory=ToolAwarenessConfig)
     thinking: ThinkingConfig = field(default_factory=ThinkingConfig)
+    ui: UIConfig = field(default_factory=UIConfig)
     router: RouterConfig = field(default_factory=RouterConfig)
     analytics: AnalyticsConfig = field(default_factory=AnalyticsConfig)
 
@@ -207,6 +214,10 @@ def _apply_toml(cfg: Config, data: dict) -> None:
         if "enabled" in th: cfg.thinking.enabled = bool(th["enabled"])
         if "default_reasoning_budget" in th: cfg.thinking.default_reasoning_budget = int(th["default_reasoning_budget"])
         if "effort_base" in th: cfg.thinking.effort_base = int(th["effort_base"])
+    if "ui" in data:
+        u = data["ui"]
+        if "show_stats" in u: cfg.ui.show_stats = bool(u["show_stats"])
+        if "markdown" in u: cfg.ui.markdown = bool(u["markdown"])
     if "router" in data:
         rt = data["router"]
         if "enabled" in rt: cfg.router.enabled = bool(rt["enabled"])
@@ -252,6 +263,8 @@ def _apply_env(cfg: Config) -> None:
         "PPMLX_THINKING_ENABLED": ("thinking", "enabled", _parse_bool),
         "PPMLX_THINKING_BUDGET": ("thinking", "default_reasoning_budget", int),
         "PPMLX_EFFORT_BASE": ("thinking", "effort_base", int),
+        "PPMLX_SHOW_STATS": ("ui", "show_stats", _parse_bool),
+        "PPMLX_MARKDOWN": ("ui", "markdown", _parse_bool),
         "PPMLX_ROUTER_ENABLED": ("router", "enabled", _parse_bool),
         "PPMLX_ROUTER_SMALL_MODEL": ("router", "small_model", str),
         "PPMLX_ROUTER_LARGE_MODEL": ("router", "large_model", str),

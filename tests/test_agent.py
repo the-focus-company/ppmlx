@@ -34,10 +34,11 @@ def _make_engine(responses: list[str]) -> MagicMock:
     call_count = {"n": 0}
 
     def _generate(repo_id, messages, **kwargs):
+        from ppmlx.engine import GenerateResult
         idx = call_count["n"]
         call_count["n"] += 1
         text = responses[idx] if idx < len(responses) else "Done."
-        return (text, None, 10, 5)
+        return GenerateResult(text=text, reasoning=None, prompt_tokens=10, completion_tokens=5)
 
     engine.generate.side_effect = _generate
     return engine

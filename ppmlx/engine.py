@@ -381,7 +381,12 @@ class TextEngine:
         """Actually load a model using mlx_lm.load. Called under lock."""
         from mlx_lm import load as mlx_load
         path = _resolve_model_path(repo_id)
-        model, tokenizer = mlx_load(path)
+        try:
+            # fix_mistral_regex silences the broken-regex warning on Mistral-derived models
+            model, tokenizer = mlx_load(path, tokenizer_config={"fix_mistral_regex": True})
+        except TypeError:
+            # Older mlx-lm doesn't support tokenizer_config kwarg
+            model, tokenizer = mlx_load(path)
         self._ensure_chat_template(tokenizer, repo_id)
         return LoadedModel(repo_id=repo_id, model=model, tokenizer=tokenizer)
 

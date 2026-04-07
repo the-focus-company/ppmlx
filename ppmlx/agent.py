@@ -520,13 +520,14 @@ class AgentRuntime:
 
         for iteration in range(self.config.max_iterations):
             # Generate response
-            text, _reasoning, _pt, _ct = engine.generate(
+            result = engine.generate(
                 repo_id=self.config.model,
                 messages=messages,
                 temperature=self.config.temperature,
                 max_tokens=self.config.max_tokens,
                 strip_thinking=True,
             )
+            text = result.text
 
             # Parse tool calls
             remaining_text, tool_calls = self._parse_tool_calls(text)

@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-04-07
+
+### Fixed
+- `agent.py` crash: `too many values to unpack` — now uses `result.text` from `GenerateResult`
+- Mistral tokenizer regex warning: pass `fix_mistral_regex=True` when loading model
+
+### Added
+- Generation stats after each response (`/set verbose` in REPL, or `[ui] show_stats = true` in config)
+- Markdown rendering for assistant output (`/set markdown` in REPL, or `[ui] markdown = true` in config)
+- Option+letter key bindings for Polish diacritical characters in REPL (ą ę ó ź ż ć ń ś ł)
+- `ppmlx/render.py` — shared `stream_and_collect()` and `print_response()` helpers
+
+### Changed
+- **Slimmer base install**: removed `mlx-vlm`, `posthog`, `sse-starlette`, `setproctitle` from core deps
+  - `mlx-vlm` → `pip install ppmlx[vision]`
+  - `posthog` → `pip install ppmlx[analytics]`
+  - `sse-starlette` removed (was unused)
+  - `setproctitle` removed (had safe fallback already)
+- Added `vision` and `analytics` optional groups + `all` meta-group
+- `ppmlx install` now also shows `vision` and `analytics` components
+
 ## [0.8.0] - 2026-04-07
 
 ### Added
