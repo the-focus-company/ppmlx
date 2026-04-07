@@ -88,6 +88,7 @@ class AgentConfig:
     max_iterations: int = 10
     temperature: float = 0.7
     sandbox: bool = False
+    max_output_chars: int = 20_000  # global cap on tool output to protect context
     permission_level: str = "full"  # "readonly", "write", "execute", "full"
 
 
@@ -266,6 +267,7 @@ def _apply_toml(cfg: Config, data: dict) -> None:
     if "agent" in data:
         ag = data["agent"]
         if "max_read_lines" in ag: cfg.agent.max_read_lines = int(ag["max_read_lines"])
+        if "max_output_chars" in ag: cfg.agent.max_output_chars = int(ag["max_output_chars"])
         if "max_iterations" in ag: cfg.agent.max_iterations = int(ag["max_iterations"])
         if "temperature" in ag: cfg.agent.temperature = float(ag["temperature"])
         if "sandbox" in ag: cfg.agent.sandbox = bool(ag["sandbox"])

@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-04-07
+
+### Added
+- **`max_output_chars`**: global cap (default 20k) on all tool output to protect model context — configurable in TUI and `[agent]` config
+
+### Fixed
+- **Download progress bar**: rewritten from filesystem polling to direct tqdm byte-counter hook — speed, ETA, and downloaded amount now update in real time
+
+### Changed
+- Download progress uses custom `_ProgressTqdm` class that captures exact bytes from HuggingFace HTTP chunks instead of scanning disk
+
 ## [0.9.0] - 2026-04-07
 
 ### Added

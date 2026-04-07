@@ -945,6 +945,7 @@ def agent(
         temperature=temperature or _acfg.temperature,
         max_tokens=max_tokens,
         max_read_lines=_acfg.max_read_lines,
+        max_output_chars=_acfg.max_output_chars,
         permission_level=_acfg.permission_level,
     )
 

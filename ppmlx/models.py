@@ -320,43 +320,23 @@ def _get_hf_token(explicit: str | None = None) -> str | None:
     return os.environ.get("HF_TOKEN") or None
 
 
-def _tree_size(path: Path) -> int:
-    """Total bytes of all files under *path* (recursive, follows symlinks)."""
-    total = 0
-    try:
-        for f in path.rglob("*"):
-            try:
-                if f.is_file():
-                    total += f.stat().st_size
-            except OSError:
-                pass
-    except OSError:
-        pass
-    return total
-
-
 def download_model(alias_or_repo: str, token: str | None = None) -> Path:
-    """
-    Download a model from HuggingFace Hub with a Rich progress bar.
+    """Download a model from HuggingFace Hub with a live Rich progress bar.
 
-    ``snapshot_download`` runs in a daemon thread with tqdm disabled.
-    The main thread polls two directories every 0.5 s:
-
-    * **local_path** — where finished files land
-    * **HF blob cache** — ``~/.cache/huggingface/hub/models--…/blobs/``
-      where in-progress ``.incomplete`` files grow byte-by-byte
-
-    ``downloaded = max(cache_growth, local_growth)`` avoids double-
-    counting while still tracking whichever location is active.
+    Instead of polling the filesystem, this hooks directly into
+    ``huggingface_hub``'s tqdm integration via a custom ``tqdm_class``.
+    Every byte written by the HTTP download calls our ``update(n)``
+    which atomically bumps a shared counter.  The main thread reads
+    that counter to drive the Rich progress bar — no disk scanning.
     """
     import threading
+    import time as _t
     from rich.console import Console as _Console
     from rich.progress import (
         Progress, BarColumn, DownloadColumn, TransferSpeedColumn,
         TimeRemainingColumn, TextColumn, SpinnerColumn,
     )
     from huggingface_hub import snapshot_download
-    from huggingface_hub.constants import HF_HUB_CACHE
 
     token = _get_hf_token(token)
     repo_id = resolve_alias(alias_or_repo)
@@ -369,36 +349,54 @@ def download_model(alias_or_repo: str, token: str | None = None) -> Path:
     local_path.mkdir(parents=True, exist_ok=True)
     total = _get_repo_size(repo_id, token)
 
-    # HF blob cache for this specific model (in-progress .incomplete files live here).
-    cache_path = Path(HF_HUB_CACHE) / f"models--{repo_id.replace('/', '--')}" / "blobs"
+    # ── shared byte counter ─────────────────────────────────────────
+    _counter_lock = threading.Lock()
+    _bytes_downloaded = [0]  # mutable so the tqdm class can write it
 
-    # Baselines — subtract pre-existing data (previous partial attempts, etc.)
-    baseline_local = _tree_size(local_path)
-    baseline_cache = _tree_size(cache_path)
+    class _ProgressTqdm:
+        """Drop-in tqdm replacement that forwards byte counts to a counter."""
 
-    # Suppress HF's own tqdm bars BEFORE the thread starts.
-    prev_hf_env = os.environ.get("HF_HUB_DISABLE_PROGRESS_BARS")
-    os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+        def __init__(
+            self, *_args: Any, total: Any = None, unit: str = "",
+            initial: int = 0, **_kw: Any,
+        ) -> None:
+            self.n = initial
+            self.total = total
+            self._is_bytes = unit in ("B", "iB")
 
-    # Dummy tqdm class to silence the file-count progress bar that
-    # snapshot_download emits even when HF_HUB_DISABLE_PROGRESS_BARS is set.
-    from tqdm.auto import tqdm as _tqdm_base
-    class _SilentTqdm(_tqdm_base):  # type: ignore[type-arg]
-        def __init__(self, *a: Any, **kw: Any) -> None:
-            kw["disable"] = True
-            super().__init__(*a, **kw)
+        def update(self, n: int = 1) -> None:
+            if n > 0 and self._is_bytes:
+                with _counter_lock:
+                    _bytes_downloaded[0] += n
+            self.n += n
 
-    # ── colours ──────────────────────────────────────────────────────
+        def close(self) -> None:
+            pass
+
+        def reset(self, total: Any = None) -> None:
+            self.n = 0
+            if total is not None:
+                self.total = total
+
+        def set_description(self, *a: Any, **kw: Any) -> None: pass
+        def set_postfix(self, *a: Any, **kw: Any) -> None: pass
+        def set_postfix_str(self, *a: Any, **kw: Any) -> None: pass
+        def refresh(self) -> None: pass
+        def display(self, *a: Any, **kw: Any) -> None: pass
+        def clear(self, *a: Any, **kw: Any) -> None: pass
+        def __enter__(self) -> "_ProgressTqdm": return self
+        def __exit__(self, *a: Any) -> None: self.close()
+
+    # ── colours ─────────────────────────────────────────────────────
     BLUE, GREEN, ORANGE, RED, WHITE = "blue", "green", "#d78700", "red", "white"
 
     bar = BarColumn(bar_width=None, complete_style=BLUE, finished_style=GREEN)
-    # Fixed-width console prevents re-draw glitches when the terminal
-    # window gains/loses focus or is resized (SIGWINCH).
     try:
         _term_width = os.get_terminal_size().columns
     except OSError:
         _term_width = 80
     _dl_console = _Console(width=_term_width)
+
     with Progress(
         SpinnerColumn(style=WHITE),
         TextColumn("[bold blue]{task.description}"),
@@ -407,11 +405,11 @@ def download_model(alias_or_repo: str, token: str | None = None) -> Path:
         TransferSpeedColumn(),
         TimeRemainingColumn(),
         console=_dl_console,
-        refresh_per_second=10,
+        refresh_per_second=4,
     ) as progress:
         task = progress.add_task(f"↓ {alias_or_repo}", total=total)
 
-        # ── background download ──────────────────────────────────────
+        # ── background download ─────────────────────────────────────
         result: dict = {}
 
         def _bg_download() -> None:
@@ -421,7 +419,7 @@ def download_model(alias_or_repo: str, token: str | None = None) -> Path:
                     local_dir=str(local_path),
                     token=token,
                     ignore_patterns=_DOWNLOAD_IGNORE_PATTERNS,
-                    tqdm_class=_SilentTqdm,
+                    tqdm_class=_ProgressTqdm,
                 )
             except BaseException as exc:
                 result["error"] = exc
@@ -429,16 +427,15 @@ def download_model(alias_or_repo: str, token: str | None = None) -> Path:
         dl_thread = threading.Thread(target=_bg_download, daemon=True)
         dl_thread.start()
 
-        # ── poll filesystem ──────────────────────────────────────────
+        # ── main loop: read counter, update Rich ────────────────────
         try:
             while dl_thread.is_alive():
-                local_growth = _tree_size(local_path) - baseline_local
-                cache_growth = _tree_size(cache_path) - baseline_cache
-                downloaded = max(local_growth, cache_growth)
+                with _counter_lock:
+                    downloaded = _bytes_downloaded[0]
                 if total:
                     downloaded = min(downloaded, total)
                 progress.update(task, completed=downloaded)
-                dl_thread.join(timeout=0.5)
+                _t.sleep(0.25)
         except KeyboardInterrupt:
             bar.complete_style = ORANGE  # type: ignore[assignment]
             bar.finished_style = ORANGE  # type: ignore[assignment]
@@ -446,14 +443,8 @@ def download_model(alias_or_repo: str, token: str | None = None) -> Path:
             progress.stop()
             shutil.rmtree(local_path, ignore_errors=True)
             raise
-        finally:
-            # Restore env var no matter what.
-            if prev_hf_env is None:
-                os.environ.pop("HF_HUB_DISABLE_PROGRESS_BARS", None)
-            else:
-                os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = prev_hf_env
 
-        # ── handle result ────────────────────────────────────────────
+        # ── handle result ───────────────────────────────────────────
         exc = result.get("error")
         if exc:
             bar.complete_style = RED  # type: ignore[assignment]
@@ -466,11 +457,13 @@ def download_model(alias_or_repo: str, token: str | None = None) -> Path:
                 f"Failed to download '{repo_id}': {exc}"
             ) from exc
 
-        # success
+        # ── success ─────────────────────────────────────────────────
+        with _counter_lock:
+            final = _bytes_downloaded[0]
         bar.complete_style = GREEN  # type: ignore[assignment]
         progress.update(
             task,
-            completed=total or _tree_size(local_path) - baseline_local,
+            completed=total or final,
             description=f"[bold {GREEN}]✓ {alias_or_repo}",
         )
 

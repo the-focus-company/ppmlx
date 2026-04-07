@@ -684,8 +684,13 @@ def execute_tool(
     sandbox: bool = False,
     command_allowlist: list[str] | None = None,
     max_read_lines: int = 200,
+    max_output_chars: int = 20_000,
 ) -> str:
-    """Execute a built-in tool by name. Returns the output string."""
+    """Execute a built-in tool by name. Returns the output string.
+
+    All tool output is capped at *max_output_chars* to protect the
+    model's context window from oversized results.
+    """
     handler = _TOOL_HANDLERS.get(name)
     if handler is None:
         return f"Error: unknown tool '{name}'"
@@ -700,7 +705,10 @@ def execute_tool(
         kwargs["command_allowlist"] = command_allowlist
     if name == "read_file":
         kwargs["max_read_lines"] = max_read_lines
-    return handler(**kwargs)
+    output = handler(**kwargs)
+    if len(output) > max_output_chars:
+        output = output[:max_output_chars] + f"\n... [truncated, {len(output)} total chars — use narrower queries]"
+    return output
 
 
 # ── Permission system ───────────────────────────────────────────────────
@@ -795,6 +803,7 @@ class AgentConfig:
     temperature: float = 0.7
     max_tokens: int | None = None
     max_read_lines: int = 200
+    max_output_chars: int = 20_000
     permission_level: str = "full"  # "readonly", "write", "execute", "full"
 
     def __post_init__(self) -> None:
@@ -924,6 +933,7 @@ class AgentRuntime:
                 sandbox=self.config.sandbox,
                 command_allowlist=self.config.command_allowlist,
                 max_read_lines=self.config.max_read_lines,
+                max_output_chars=self.config.max_output_chars,
             )
             is_error = output.startswith("Error:")
         except ValueError as exc:

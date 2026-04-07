@@ -97,6 +97,9 @@ def config_menu() -> None:
     cur_agent_temp = agent_data.get("temperature", 0.7)
     agent_temp_options = _ensure_in(agent_temp_options, cur_agent_temp)
     cur_agent_sandbox = agent_data.get("sandbox", False)
+    max_output_options = [5000, 10000, 20000, 50000, 100000]
+    cur_max_output = agent_data.get("max_output_chars", 20000)
+    max_output_options = _ensure_in(max_output_options, cur_max_output)
     permission_levels = ["readonly", "write", "execute", "full"]
     cur_permission = agent_data.get("permission_level", "full")
 
@@ -185,6 +188,9 @@ def config_menu() -> None:
               agent_temp_options),
         _Item("agent_sandbox", "Sandbox", "toggle",
               labels={True: "Enabled", False: "Disabled"}),
+        _Item("max_output_chars", "Max Output Chars", "cycle",
+              max_output_options,
+              {v: f"{v // 1000}k chars" for v in max_output_options}),
         _Item("agent_permission", "Permission Level", "cycle",
               permission_levels,
               {"readonly": "Read Only", "write": "Read + Write", "execute": "Read + Write + Execute", "full": "Full (with confirmation)"}),
@@ -240,6 +246,7 @@ def config_menu() -> None:
         "agent_max_iterations": agent_max_iter_options.index(cur_agent_max_iter),
         "agent_temperature": agent_temp_options.index(cur_agent_temp),
         "agent_sandbox": cur_agent_sandbox,
+        "max_output_chars": max_output_options.index(cur_max_output),
         "agent_permission": permission_levels.index(cur_permission) if cur_permission in permission_levels else 3,
         "reg_enabled": cur_reg_enabled,
         "refresh": refresh_modes.index(cur_refresh),
@@ -365,6 +372,7 @@ def config_menu() -> None:
         data["agent"]["max_iterations"] = agent_max_iter_options[state["agent_max_iterations"]]
         data["agent"]["temperature"] = agent_temp_options[state["agent_temperature"]]
         data["agent"]["sandbox"] = state["agent_sandbox"]
+        data["agent"]["max_output_chars"] = max_output_options[state["max_output_chars"]]
         data["agent"]["permission_level"] = permission_levels[state["agent_permission"]]
         data.setdefault("registry", {})["enabled"] = state["reg_enabled"]
         data["registry"]["refresh"] = refresh_modes[state["refresh"]]
