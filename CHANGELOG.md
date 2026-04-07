@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-04-07
+
+### Fixed
+- **GPU crash**: retry path in `generate()` now acquires `_generate_lock` (prevented Metal crash on concurrent requests)
+- **Corrupted output**: retry no longer reuses stale `prompt_cache` from the original prompt
+- **3 NameError bugs**: `except Exception:` → `except Exception as exc:` in completions, responses, and anthropic error handlers
+- **Router score inflation**: image detection added +2 per message instead of +2 total
+- **Router false positives**: removed `=>`, `.map(`, `import` from code patterns (matched natural language)
+- **Silent config failures**: TOML parse errors now log a warning instead of silently reverting to defaults
+- **`_parse_bool`**: empty string and `"off"` now correctly evaluate to `False`
+- **Benchmark stddev**: uses Bessel's correction (n-1) for accurate sample standard deviation
+
+### Changed
+- Config loaded once per process (`_get_config()` cache) — was 3× disk reads per request
+- Extracted `_build_mlx_kwargs()` — eliminates 20 lines of duplicated kwargs construction
+- Extracted `_resolve_thinking()` — identical 5-line block appeared 4× in server.py
+- Extracted `_print_comparison_table()` — shared by `print_comparison` and `print_speculative_comparison`
+- `PromptCacheStore.is_enabled` property replaces private `_max_entries` access
+- `_skip_copy` flag on `PromptCacheStore.store()` eliminates one deep-copy (~400 MB for 7B models)
+- `_apply_prompt_cache()` returns prompt token count (avoids redundant re-tokenization)
+- `PromptCacheStore.stats()` includes estimated memory usage per entry
+- Prompt cache key uses SHA-1 instead of `hash()` (prevents silent hash collisions)
+- `all_aliases()` hoisted out of `list_local_models` loop (was N disk reads)
+- `hashlib` import moved to module level
+- `_ensure_chat_template` simplified and adds `log.debug` on failures
+- Router logger corrected from `ppmlx.engine` to `ppmlx.router`
+
+### Removed
+- `_get_or_load()` trivial wrapper (5 call sites inlined to `self.load()`)
+- `_get_text_stream()` and `_text_generate()` dead code (48 lines, zero callers)
+- Duplicate `RouterConfig` from `router.py` (single source in `config.py`)
+- Dead `ScenarioStats.scenario` field
+- 3 duplicate comment blocks
+
 ## [0.7.0] - 2026-04-07
 
 ### Added
