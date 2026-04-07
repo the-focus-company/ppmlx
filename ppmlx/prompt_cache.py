@@ -98,6 +98,19 @@ class PromptCacheStore:
         )
         return cached, remaining
 
+    @staticmethod
+    def _make_key(repo_id: str, tokens: tuple[int, ...]) -> str:
+        """Build a cache key from repo_id and token sequence.
+
+        Uses a collision-resistant hash (SHA-1 of raw token bytes) instead
+        of Python's ``hash()`` to avoid silent eviction from hash collisions.
+        """
+        import hashlib
+        h = hashlib.sha1(
+            b"".join(t.to_bytes(4, "little", signed=True) for t in tokens)
+        ).hexdigest()[:16]
+        return f"{repo_id}:{len(tokens)}:{h}"
+
     def store(
         self, repo_id: str, tokens: list[int], cache: list[Any],
         *, _skip_copy: bool = False,
@@ -110,7 +123,7 @@ class PromptCacheStore:
         hundreds of MB of KV tensors).
         """
         token_tuple = tuple(tokens)
-        key = f"{repo_id}:{len(token_tuple)}:{hash(token_tuple)}"
+        key = self._make_key(repo_id, token_tuple)
 
         snapshot = cache if _skip_copy else copy.deepcopy(cache)
 

@@ -648,6 +648,21 @@ def _speculative_kwargs(
     return kw
 
 
+def _resolve_thinking(
+    think: bool | None, tools: list | None, reasoning_budget: int | None,
+) -> bool:
+    """Determine whether to enable thinking mode.
+
+    Logic: explicit ``think`` param wins > tools without budget disable
+    thinking (prevents infinite tool-call reasoning) > default on.
+    """
+    if think is not None:
+        return think
+    if tools and not reasoning_budget:
+        return False
+    return True
+
+
 # ── Endpoints ───────────────────────────────────────────────────────────
 
 @app.get("/")
@@ -907,56 +922,6 @@ async def chat_completions(request: Request):
         )
 
 
-def _get_text_stream(repo_id, messages, temperature, top_p, max_tokens, seed, tools):
-    """Return an async iterator of text chunks, using BatchEngine or TextEngine."""
-    if _batch_mode:
-        from ppmlx.batch import get_batch_engine
-        return get_batch_engine().stream_generate(
-            repo_id, messages,
-            temperature=0.7 if temperature is None else temperature,
-            top_p=1.0 if top_p is None else top_p,
-            max_tokens=max_tokens,
-            seed=seed,
-            tools=tools,
-        )
-    from ppmlx.engine import get_engine
-    gen = get_engine().stream_generate(
-        repo_id, messages,
-        temperature=0.7 if temperature is None else temperature,
-        top_p=1.0 if top_p is None else top_p,
-        max_tokens=max_tokens,
-        seed=seed,
-        tools=tools,
-    )
-    return _async_iter_sync_gen(gen)
-
-
-async def _text_generate(repo_id, messages, temperature, top_p, max_tokens, seed,
-                          repetition_penalty, tools):
-    """Run a non-streaming text generation, using BatchEngine or TextEngine."""
-    if _batch_mode:
-        from ppmlx.batch import get_batch_engine
-        return await get_batch_engine().generate(
-            repo_id, messages,
-            temperature=0.7 if temperature is None else temperature,
-            top_p=1.0 if top_p is None else top_p,
-            max_tokens=max_tokens,
-            seed=seed,
-            repetition_penalty=repetition_penalty,
-            tools=tools,
-        )
-    from ppmlx.engine import get_engine
-    return get_engine().generate(
-        repo_id, messages,
-        temperature=0.7 if temperature is None else temperature,
-        top_p=1.0 if top_p is None else top_p,
-        max_tokens=max_tokens,
-        seed=seed,
-        repetition_penalty=repetition_penalty,
-        tools=tools,
-    )
-
-
 def _stream_chat(
     request_id, created, model_name, repo_id, messages,
     engine_type, temperature, top_p, max_tokens, stop, seed,
@@ -1008,14 +973,7 @@ def _stream_chat(
                 from ppmlx.engine import get_engine
                 engine = get_engine()
 
-                # Determine whether to enable thinking
-                if think is not None:
-                    enable_thinking = think
-                elif tools and not reasoning_budget:
-                    enable_thinking = False
-                else:
-                    enable_thinking = True
-
+                enable_thinking = _resolve_thinking(think, tools, reasoning_budget)
                 # When thinking is enabled and no tools, we parse
                 # <think> tags ourselves; otherwise let engine strip them.
                 strip_thinking = not enable_thinking or bool(tools)
@@ -1324,13 +1282,7 @@ async def _nonstream_chat(
 ):
     """Return non-streaming JSON response."""
     # Determine thinking mode: explicit param > tool heuristic > default on
-    # When a reasoning_budget is set, allow thinking even with tools.
-    if think is not None:
-        enable_thinking = think
-    elif tools and not reasoning_budget:
-        enable_thinking = False
-    else:
-        enable_thinking = True
+    enable_thinking = _resolve_thinking(think, tools, reasoning_budget)
 
     try:
         if engine_type == "text":
@@ -1481,7 +1433,7 @@ async def completions(request: Request):
             temperature=0.7 if temperature is None else temperature,
             max_tokens=max_tokens,
         )
-    except Exception:
+    except Exception as exc:
         log.exception("Text completion generation failed")
         raise HTTPException(status_code=503, detail=f"Model generation failed: {exc}")
 
@@ -2053,7 +2005,7 @@ async def _nonstream_responses(
             raise HTTPException(status_code=400, detail=f"Model '{model_name}' is an embedding model.")
     except HTTPException:
         raise
-    except Exception:
+    except Exception as exc:
         log.exception("Responses generation failed")
         raise HTTPException(status_code=503, detail=f"Model generation failed: {exc}")
 
@@ -2310,13 +2262,7 @@ def _stream_anthropic(
             engine = get_engine()
             # Determine thinking mode
             # When a reasoning_budget is set, allow thinking even with tools
-            # (the budget prevents infinite thinking loops).
-            if think is not None:
-                _enable_thinking = think
-            elif oai_tools and not reasoning_budget:
-                _enable_thinking = False
-            else:
-                _enable_thinking = True
+            _enable_thinking = _resolve_thinking(think, oai_tools, reasoning_budget)
 
             _gen_kwargs = {
                 "temperature": 0.7 if temperature is None else temperature,
@@ -2489,13 +2435,7 @@ async def _nonstream_anthropic(
     temperature, max_tokens, oai_tools, orig_tools,
     think=None, reasoning_budget=None,
 ):
-    # Determine thinking mode
-    if think is not None:
-        enable_thinking = think
-    elif oai_tools and not reasoning_budget:
-        enable_thinking = False
-    else:
-        enable_thinking = True
+    enable_thinking = _resolve_thinking(think, oai_tools, reasoning_budget)
 
     try:
         from ppmlx.engine import get_engine
@@ -2515,7 +2455,7 @@ async def _nonstream_anthropic(
             gen_kwargs.pop("reasoning_budget", None)
             result = engine.generate(repo_id, messages, **gen_kwargs)
             text, reasoning, prompt_tokens, completion_tokens = result[0], result[1], result[2], result[3]
-    except Exception:
+    except Exception as exc:
         log.exception("Anthropic messages generation failed")
         raise HTTPException(status_code=503, detail=f"Model generation failed: {exc}")
 

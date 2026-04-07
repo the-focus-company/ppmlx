@@ -57,15 +57,13 @@ def get_draft_model(alias_or_repo: str) -> str | None:
         return DRAFT_PAIRS[alias_or_repo]
 
     # 2. Reverse lookup from repo_id → alias → pair
-    # Check DEFAULT_ALIASES first (always available, no IO needed)
+    # Check DEFAULT_ALIASES first (always available, no IO needed),
+    # then all_aliases() which includes registry and user overrides.
     for alias, repo_id in DEFAULT_ALIASES.items():
         if repo_id == alias_or_repo and alias in DRAFT_PAIRS:
             return DRAFT_PAIRS[alias]
-
-    # Then check all aliases (includes registry and user overrides)
     try:
-        all_a = all_aliases()
-        for alias, repo_id in all_a.items():
+        for alias, repo_id in all_aliases().items():
             if repo_id == alias_or_repo and alias in DRAFT_PAIRS:
                 return DRAFT_PAIRS[alias]
     except Exception:
@@ -509,17 +507,23 @@ def list_local_models() -> list[dict[str, Any]]:
     if not models_dir.exists():
         return result
 
+    aliases = all_aliases()
+    # Build reverse map once: repo_id → first alias
+    repo_to_alias: dict[str, str] = {}
+    for alias, repo_id in aliases.items():
+        if repo_id not in repo_to_alias:
+            repo_to_alias[repo_id] = alias
+
     for d in sorted(models_dir.iterdir()):
         if not d.is_dir():
             continue
         size_bytes = sum(f.stat().st_size for f in d.rglob("*") if f.is_file())
         size_gb = size_bytes / (1024 ** 3)
         repo_id = d.name.replace("--", "/", 1)
-        aliases_for_model = [k for k, v in all_aliases().items() if v == repo_id]
         result.append({
             "name": d.name,
             "repo_id": repo_id,
-            "alias": aliases_for_model[0] if aliases_for_model else repo_id,
+            "alias": repo_to_alias.get(repo_id, repo_id),
             "size_gb": round(size_gb, 2),
             "path": d,
         })
