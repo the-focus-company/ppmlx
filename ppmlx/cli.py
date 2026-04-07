@@ -596,24 +596,37 @@ def main(
 
 @app.command()
 def install(
-    component: Optional[str] = typer.Argument(None, help="Component to install: voice, embeddings"),
+    component: Optional[str] = typer.Argument(None, help="Component: vision, embeddings, voice, analytics"),
     status: bool = typer.Option(False, "--status", "-s", help="Show installation status"),
+    remove: bool = typer.Option(False, "--remove", "-r", help="Remove (uninstall) instead of install"),
 ):
-    """Install optional components (voice, embeddings).
+    """Install or remove optional components.
 
     Run without arguments for interactive mode. Components are kept
     separate from the base install to avoid bloating the core package.
 
     \b
     Examples:
-      ppmlx install              # interactive picker
-      ppmlx install voice        # install voice I/O directly
-      ppmlx install --status     # show what's installed
+      ppmlx install                    # interactive install picker
+      ppmlx install voice              # install voice I/O directly
+      ppmlx install --remove           # interactive uninstall picker
+      ppmlx install --remove voice     # remove voice I/O directly
+      ppmlx install --status           # show what's installed
     """
-    from ppmlx.installer import status_table, install_interactive, install_component
+    from ppmlx.installer import (
+        status_table, install_interactive, install_component,
+        uninstall_interactive, uninstall_component,
+    )
 
     if status:
         status_table()
+        return
+
+    if remove:
+        if component:
+            ok = uninstall_component(component)
+            raise typer.Exit(0 if ok else 1)
+        uninstall_interactive()
         return
 
     if component:
