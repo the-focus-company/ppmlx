@@ -141,18 +141,38 @@ class PromptCacheStore:
         with self._lock:
             return len(self._entries)
 
+    @staticmethod
+    def _estimate_cache_bytes(cache: list[Any]) -> int:
+        """Estimate memory usage of a KV-cache in bytes."""
+        total = 0
+        for layer in cache:
+            for attr in ("keys", "values"):
+                arr = getattr(layer, attr, None)
+                if arr is not None:
+                    total += getattr(arr, "nbytes", 0)
+            # QuantizedKVCache stores (data, scales, biases) tuples
+            state = getattr(layer, "state", None)
+            if hasattr(state, "nbytes"):
+                total += state.nbytes
+        return total
+
     def stats(self) -> dict[str, Any]:
-        """Return cache statistics."""
+        """Return cache statistics including estimated memory usage."""
         with self._lock:
+            total_bytes = 0
             entries: list[dict[str, Any]] = []
             for key, entry in self._entries.items():
                 repo_id = key.split(":")[0]
+                entry_bytes = self._estimate_cache_bytes(entry.cache)
+                total_bytes += entry_bytes
                 entries.append({
                     "repo_id": repo_id,
                     "tokens": len(entry.tokens),
+                    "bytes": entry_bytes,
                 })
             return {
                 "entries": len(self._entries),
                 "max_entries": self._max_entries,
+                "total_mb": round(total_bytes / (1024 * 1024), 1),
                 "models": entries,
             }

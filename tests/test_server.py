@@ -49,11 +49,18 @@ sys.modules["ppmlx.memory"].get_system_ram_gb = MagicMock(return_value=16.0)
 mock_config = MagicMock()
 mock_config.logging = SimpleNamespace(snapshot_interval_seconds=60)
 mock_config.tool_awareness = SimpleNamespace(mode="no_tools_only")
+mock_config.thinking = SimpleNamespace(enabled=True, default_reasoning_budget=512, effort_base=256,
+                                        effort_to_budget=lambda e: {"low": 256, "medium": 1024, "high": 8192}.get(e))
+mock_config.router = SimpleNamespace(enabled=False, small_model="small", large_model="large", threshold=3)
+mock_config.server = SimpleNamespace(max_tools_tokens=12000)
 sys.modules["ppmlx.config"].load_config = MagicMock(return_value=mock_config)
 
 import pytest
 from fastapi.testclient import TestClient
-from ppmlx.server import app
+from ppmlx.server import app, _reset_config_cache
+
+# Reset config cache so it picks up our mock on first call
+_reset_config_cache()
 
 
 @pytest.fixture
@@ -244,15 +251,19 @@ def test_chat_completion_skips_tool_awareness_for_tools_in_no_tools_only_mode(cl
 
 
 def test_inject_tool_awareness_returns_messages_unchanged_when_disabled(monkeypatch):
-    from ppmlx.server import _inject_tool_awareness
+    from ppmlx.server import _inject_tool_awareness, _reset_config_cache
     from ppmlx import config as config_module
     monkeypatch.setattr(
         config_module,
         "load_config",
         lambda: SimpleNamespace(tool_awareness=SimpleNamespace(mode="off")),
     )
+    _reset_config_cache()
     messages = [{"role": "user", "content": "Hi"}]
-    assert _inject_tool_awareness(messages, None) == messages
+    result = _inject_tool_awareness(messages, None)
+    # Restore cache for subsequent tests
+    _reset_config_cache()
+    assert result == messages
 
 
 # ---------------------------------------------------------------------------

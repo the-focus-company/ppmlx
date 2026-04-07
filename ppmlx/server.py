@@ -73,6 +73,36 @@ _MAX_EMBED_INPUTS = 256
 
 _cached_server_config = None
 _server_config_loaded = False
+_cached_full_config = None
+_full_config_loaded = False
+
+
+def _get_config():
+    """Return the cached full Config, loading once on first call.
+
+    Used by hot-path helpers (_inject_tool_awareness, _get_max_tools_tokens,
+    chat_completions) to avoid re-reading config.toml on every request.
+    """
+    global _cached_full_config, _full_config_loaded
+    if _full_config_loaded:
+        return _cached_full_config
+    _full_config_loaded = True
+    try:
+        from ppmlx.config import load_config
+        _cached_full_config = load_config()
+    except Exception:
+        pass
+    return _cached_full_config
+
+
+def _reset_config_cache() -> None:
+    """Reset the config cache (for testing)."""
+    global _cached_full_config, _full_config_loaded
+    global _cached_server_config, _server_config_loaded
+    _cached_full_config = None
+    _full_config_loaded = False
+    _cached_server_config = None
+    _server_config_loaded = False
 
 
 def _load_server_config():
@@ -84,14 +114,11 @@ def _load_server_config():
     if _server_config_loaded:
         return _cached_server_config
     _server_config_loaded = True
-    try:
-        from ppmlx.config import load_config
-        cfg = load_config()
+    cfg = _get_config()
+    if cfg is not None:
         # Guard against mocked config objects in tests
         if hasattr(cfg.server, "host") and isinstance(cfg.server.host, str):
             _cached_server_config = cfg.server
-    except Exception:
-        pass
     return _cached_server_config
 
 
@@ -353,12 +380,8 @@ def _inject_tool_awareness(messages: list[dict], tools: list[dict] | None) -> li
     and burn thousands of tokens reasoning about tools that don't exist.
     With the hint they answer immediately: "I don't have that tool."
     """
-    try:
-        from ppmlx.config import load_config
-        cfg = load_config()
-        mode = getattr(getattr(cfg, "tool_awareness", None), "mode", "no_tools_only")
-    except Exception:
-        mode = "no_tools_only"
+    cfg = _get_config()
+    mode = getattr(getattr(cfg, "tool_awareness", None), "mode", "no_tools_only") if cfg else "no_tools_only"
 
     mode = str(mode).strip().lower()
     if mode in {"0", "false", "no", "off"}:
@@ -518,12 +541,10 @@ _MAX_TOOLS_TOKENS = 12000
 
 
 def _get_max_tools_tokens() -> int:
-    try:
-        from ppmlx.config import load_config
-        cfg = load_config()
+    cfg = _get_config()
+    if cfg is not None:
         return cfg.server.max_tools_tokens
-    except Exception:
-        return _MAX_TOOLS_TOKENS
+    return _MAX_TOOLS_TOKENS
 
 
 def _limit_tools(tools: list[dict] | None) -> list[dict] | None:
@@ -782,12 +803,7 @@ async def chat_completions(request: Request):
     think = body.get("think")
     reasoning_budget = body.get("reasoning_budget")
 
-    # Load config for thinking defaults
-    try:
-        from ppmlx.config import load_config
-        _cfg = load_config()
-    except Exception:
-        _cfg = None
+    _cfg = _get_config()
 
     # Map OpenAI reasoning_effort ("low"/"medium"/"high") to reasoning_budget
     reasoning_effort = body.get("reasoning_effort")
@@ -2141,12 +2157,7 @@ async def anthropic_messages(request: Request):
         if budget_tokens is None and "budget_tokens" in thinking_cfg:
             budget_tokens = thinking_cfg["budget_tokens"]
 
-    # Load config for thinking defaults
-    try:
-        from ppmlx.config import load_config
-        _cfg = load_config()
-    except Exception:
-        _cfg = None
+    _cfg = _get_config()
 
     # Also check reasoning_effort (OpenAI-style, some clients send it)
     reasoning_effort = body.get("reasoning_effort")

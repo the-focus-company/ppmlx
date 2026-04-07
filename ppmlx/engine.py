@@ -558,6 +558,38 @@ class TextEngine:
 
         return cached_kv, num_cached
 
+    def _build_mlx_kwargs(
+        self, prompt: str, max_tokens: int,
+        temperature: float, top_p: float,
+        seed: int | None, repetition_penalty: float | None,
+        draft_model: str | None, num_draft_tokens: int,
+    ) -> dict[str, Any]:
+        """Build shared kwargs dict for mlx-lm generate/stream calls."""
+        try:
+            from mlx_lm.sample_utils import make_sampler
+            sampler = make_sampler(temp=temperature, top_p=top_p)
+        except Exception:
+            sampler = None
+
+        kwargs: dict[str, Any] = {"prompt": prompt, "max_tokens": max_tokens}
+        if sampler is not None:
+            kwargs["sampler"] = sampler
+        if seed is not None:
+            kwargs["seed"] = seed
+        if repetition_penalty is not None and repetition_penalty != 1.0:
+            try:
+                from mlx_lm.sample_utils import make_logits_processors
+                kwargs["logits_processors"] = make_logits_processors(
+                    repetition_penalty=repetition_penalty,
+                )
+            except (ImportError, TypeError):
+                pass
+        if draft_model is not None:
+            draft_lm = self._get_or_load(draft_model)
+            kwargs["draft_model"] = draft_lm.model
+            kwargs["num_draft_tokens"] = num_draft_tokens
+        return kwargs
+
     def generate(
         self,
         repo_id: str,
@@ -578,15 +610,6 @@ class TextEngine:
         """
         Generate a response.
         Returns a ``GenerateResult`` (backward-compatible with 4-tuple unpacking).
-
-        reasoning_text is populated for <think>...</think> models.
-        prompt_tokens and completion_tokens are estimates (token count from encode).
-        enable_thinking=False suppresses the thinking phase for models that support it (e.g. Qwen3).
-        max_tokens=None means 50% of the model's context window (capped at _MAX_AUTO_TOKENS,
-        or _MAX_AUTO_TOKENS_THINKING for thinking models).
-        reasoning_budget limits how many tokens the model may spend on reasoning.
-        draft_model: optional repo_id/alias for a small draft model to enable speculative decoding.
-        num_draft_tokens: number of candidate tokens the draft model proposes per step (default 5).
         """
         from mlx_lm import generate as mlx_generate
 
@@ -594,35 +617,11 @@ class TextEngine:
         if max_tokens is None:
             max_tokens = _auto_max_tokens(lm)
         prompt = self._apply_chat_template(lm, messages, enable_thinking=enable_thinking, tools=tools)
-
-        try:
-            from mlx_lm.sample_utils import make_sampler
-            sampler = make_sampler(temp=temperature, top_p=top_p)
-        except Exception:
-            sampler = None
-        kwargs: dict[str, Any] = {
-            "prompt": prompt,
-            "max_tokens": max_tokens,
-            "verbose": False,
-        }
-        if sampler is not None:
-            kwargs["sampler"] = sampler
-        if seed is not None:
-            kwargs["seed"] = seed
-        if repetition_penalty is not None and repetition_penalty != 1.0:
-            try:
-                from mlx_lm.sample_utils import make_logits_processors
-                kwargs["logits_processors"] = make_logits_processors(
-                    repetition_penalty=repetition_penalty,
-                )
-            except (ImportError, TypeError):
-                pass
-
-        # Speculative decoding: load draft model and pass to mlx-lm
-        if draft_model is not None:
-            draft_lm = self._get_or_load(draft_model)
-            kwargs["draft_model"] = draft_lm.model
-            kwargs["num_draft_tokens"] = num_draft_tokens
+        kwargs = self._build_mlx_kwargs(
+            prompt, max_tokens, temperature, top_p,
+            seed, repetition_penalty, draft_model, num_draft_tokens,
+        )
+        kwargs["verbose"] = False
 
         with self._generate_lock:
             cached_prompt_len = self._apply_prompt_cache(
@@ -693,12 +692,6 @@ class TextEngine:
         Stream token-by-token generation.
         Yields text chunks. When strip_thinking=True (default), <think>...</think>
         blocks are silently consumed and not yielded.
-        enable_thinking=False suppresses the thinking phase for models that support it (e.g. Qwen3).
-        max_tokens=None means 50% of the model's context window (capped at _MAX_AUTO_TOKENS,
-        or _MAX_AUTO_TOKENS_THINKING for thinking models).
-        reasoning_budget limits how many tokens (approximate) the model may spend on reasoning.
-        draft_model: optional repo_id/alias for a small draft model to enable speculative decoding.
-        num_draft_tokens: number of candidate tokens the draft model proposes per step (default 5).
         """
         from mlx_lm import stream_generate as mlx_stream
 
@@ -706,34 +699,10 @@ class TextEngine:
         if max_tokens is None:
             max_tokens = _auto_max_tokens(lm)
         prompt = self._apply_chat_template(lm, messages, enable_thinking=enable_thinking, tools=tools)
-
-        try:
-            from mlx_lm.sample_utils import make_sampler
-            sampler = make_sampler(temp=temperature, top_p=top_p)
-        except Exception:
-            sampler = None
-        kwargs: dict[str, Any] = {
-            "prompt": prompt,
-            "max_tokens": max_tokens,
-        }
-        if sampler is not None:
-            kwargs["sampler"] = sampler
-        if seed is not None:
-            kwargs["seed"] = seed
-        if repetition_penalty is not None and repetition_penalty != 1.0:
-            try:
-                from mlx_lm.sample_utils import make_logits_processors
-                kwargs["logits_processors"] = make_logits_processors(
-                    repetition_penalty=repetition_penalty,
-                )
-            except (ImportError, TypeError):
-                pass
-
-        # Speculative decoding: load draft model and pass to mlx-lm
-        if draft_model is not None:
-            draft_lm = self._get_or_load(draft_model)
-            kwargs["draft_model"] = draft_lm.model
-            kwargs["num_draft_tokens"] = num_draft_tokens
+        kwargs = self._build_mlx_kwargs(
+            prompt, max_tokens, temperature, top_p,
+            seed, repetition_penalty, draft_model, num_draft_tokens,
+        )
 
         _gemma4 = _is_gemma4_model(lm.tokenizer)
 
