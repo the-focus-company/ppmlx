@@ -27,6 +27,15 @@ console = Console()
 _VALID_QUANTIZE_BITS = frozenset({2, 3, 4, 6, 8})
 
 
+def _set_process_title(title: str) -> None:
+    """Best-effort process title for Activity Monitor/ps/top."""
+    if _setproctitle_mod:
+        try:
+            _setproctitle_mod.setproctitle(title)
+        except Exception:
+            pass
+
+
 @dataclass
 class _LaunchItem:
     key: str    # "run" | "claude" | "codex" | "opencode" | "pi"
@@ -771,8 +780,8 @@ def serve(
         border_style="blue",
     ))
 
-    if _setproctitle_mod:
-        _setproctitle_mod.setproctitle(f"ppmlx: server ({effective_host}:{effective_port})")
+    title_model = f" {model}" if model else ""
+    _set_process_title(f"ppmlx serve{title_model} ({effective_host}:{effective_port})")
 
     uvicorn.run(
         "ppmlx.server:app",
@@ -795,6 +804,7 @@ def run(
     _track_usage("repl_started", {"interactive_model_pick": model is None})
     if not model:
         model = _pick_model()
+    _set_process_title(f"ppmlx run {model}")
     from ppmlx.models import get_model_path, download_model, resolve_alias, ModelNotFoundError
     from ppmlx.engine import get_engine
     from ppmlx.memory import check_memory_warning
@@ -1137,6 +1147,7 @@ def run(
                 repo_id = resolve_alias(new_model)
                 local_path = get_model_path(repo_id)
                 model = new_model
+                _set_process_title(f"ppmlx run {model}")
                 console.print(f"[dim]Switched to {model}[/dim]")
             except ModelNotFoundError as exc:
                 console.print(f"[red]{exc}[/red]")

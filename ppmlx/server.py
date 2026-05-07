@@ -1529,39 +1529,16 @@ _SENTINEL = object()
 
 
 async def _async_iter_sync_gen(sync_gen, loop=None):
-    """Yield items from a blocking sync generator without blocking the event loop.
+    """Yield items from a blocking sync generator.
 
-    Runs the generator in a background thread and bridges items to the async
-    world via an :class:`asyncio.Queue`.
+    Keep MLX generation on the server thread. MLX 0.31+ uses thread-local GPU
+    streams, and consuming a generator on a background thread can crash with
+    ``There is no Stream(gpu, N) in current thread`` when the model/cache was
+    created on another thread.
     """
-    if loop is None:
-        loop = asyncio.get_event_loop()
-    q: asyncio.Queue = asyncio.Queue()
-
-    def _producer():
-        try:
-            for item in sync_gen:
-                loop.call_soon_threadsafe(q.put_nowait, item)
-        except Exception as exc:
-            loop.call_soon_threadsafe(q.put_nowait, exc)
-        finally:
-            loop.call_soon_threadsafe(q.put_nowait, _SENTINEL)
-
-    import threading
-    t = threading.Thread(target=_producer, daemon=True)
-    t.start()
-
-    while True:
-        try:
-            item = await asyncio.wait_for(q.get(), timeout=5.0)
-        except asyncio.TimeoutError:
-            yield ""  # keep-alive: generator still working (e.g. thinking)
-            continue
-        if item is _SENTINEL:
-            break
-        if isinstance(item, Exception):
-            raise item
+    for item in sync_gen:
         yield item
+        await asyncio.sleep(0)
 
 
 # ── Shared think-tag stream parser ──────────────────────────────────
@@ -2125,7 +2102,8 @@ async def anthropic_messages(request: Request):
     log.info(
         "POST /v1/messages model=%s think=%s budget=%s effort=%s effort_base=%s stream=%s tools=%d",
         model_name, think_enabled, budget_tokens, reasoning_effort,
-        _cfg.thinking.effort_base if _cfg else "?", stream, len(tools or []),
+        getattr(getattr(_cfg, "thinking", None), "effort_base", "?") if _cfg else "?",
+        stream, len(tools or []),
     )
 
     if stream:
@@ -2173,13 +2151,14 @@ def _stream_anthropic(
         try:
             from ppmlx.engine import get_engine
             engine = get_engine()
-            # Determine thinking mode
-            # When a reasoning_budget is set, allow thinking even with tools
-            # (the budget prevents infinite thinking loops).
-            if think is not None:
-                _enable_thinking = think
-            elif oai_tools and not reasoning_budget:
+            # Determine thinking mode. Tool/agent requests need visible text or
+            # tool_use output. Streaming reasoning budgets are not enforced in the
+            # engine yet, so allowing thinking here can exhaust the response in
+            # hidden reasoning.
+            if oai_tools:
                 _enable_thinking = False
+            elif think is not None:
+                _enable_thinking = think
             else:
                 _enable_thinking = True
 
@@ -2349,10 +2328,10 @@ async def _nonstream_anthropic(
     think=None, reasoning_budget=None,
 ):
     # Determine thinking mode
-    if think is not None:
-        enable_thinking = think
-    elif oai_tools and not reasoning_budget:
+    if oai_tools:
         enable_thinking = False
+    elif think is not None:
+        enable_thinking = think
     else:
         enable_thinking = True
 
