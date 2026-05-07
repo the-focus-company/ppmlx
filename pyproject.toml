@@ -1,6 +1,6 @@
 [project]
 name = "ppmlx"
-version = "0.5.2"
+version = "0.5.3"
 description = "CLI for running LLMs on Apple Silicon via MLX"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -55,7 +55,7 @@ Issues = "https://github.com/the-focus-company/ppmlx/issues"
 Documentation = "https://github.com/the-focus-company/ppmlx#readme"
 
 [project.scripts]
-ppmlx = "ppmlx.cli:app"
+ppmlx = "ppmlx.cli:main_entry"
 
 [build-system]
 requires = ["hatchling"]

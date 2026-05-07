@@ -247,6 +247,72 @@ def _track_usage(event: str, data: dict | None = None, *, context: str = "server
         pass
 
 
+def _safe_error_endpoint(path: str) -> str:
+    known = {
+        "/v1/chat/completions",
+        "/v1/completions",
+        "/v1/embeddings",
+        "/v1/responses",
+        "/v1/models",
+        "/v1/messages/count_tokens",
+        "/health",
+        "/metrics",
+    }
+    return path if path in known else "other"
+
+
+def _track_api_error(
+    *,
+    endpoint: str,
+    status_code: int,
+    error_type: str,
+    error_stage: str | None = None,
+) -> None:
+    try:
+        from ppmlx.analytics import track_error
+
+        track_error(
+            context="server",
+            endpoint=_safe_error_endpoint(endpoint),
+            status_code=status_code,
+            error_type=error_type,
+            error_stage=error_stage,
+        )
+    except Exception:
+        pass
+
+
+@app.middleware("http")
+async def _analytics_error_tracking_middleware(request: Request, call_next):
+    try:
+        response = await call_next(request)
+    except HTTPException as exc:
+        _track_api_error(
+            endpoint=request.url.path,
+            status_code=exc.status_code,
+            error_type="HTTPException",
+            error_stage="exception",
+        )
+        raise
+    except Exception as exc:
+        _track_api_error(
+            endpoint=request.url.path,
+            status_code=500,
+            error_type=type(exc).__name__,
+            error_stage="exception",
+        )
+        raise
+
+    if response.status_code >= 400:
+        _track_api_error(
+            endpoint=request.url.path,
+            status_code=response.status_code,
+            error_type="HTTPError",
+            error_stage="response",
+        )
+    return response
+
+
 def _merge_system_messages(messages: list[dict]) -> list[dict]:
     """Merge all system messages into a single one at the start.
 
@@ -1500,7 +1566,7 @@ async def _async_iter_sync_gen(sync_gen, loop=None):
 
 # ── Shared think-tag stream parser ──────────────────────────────────
 
-async def _parse_think_tags(raw_stream):
+async def _parse_think_tags(raw_stream, *, assume_in_thinking: bool = False):
     """Parse ``<think>...</think>`` tags from a raw token stream.
 
     Yields tuples describing what was parsed:
@@ -1510,10 +1576,12 @@ async def _parse_think_tags(raw_stream):
     * ``("text", chunk)``  — a chunk of answer text
     * ``("flush_text", full_text)``  — final flush of any buffered text
 
-    Assumes the model may start *inside* a thinking block (Qwen3 injects
-    ``<think>`` into the generation prompt).
+    Some thinking models start *inside* a thinking block because their chat
+    template injects ``<think>`` into the generation prompt. Pass
+    ``assume_in_thinking=True`` only for those models; otherwise plain model
+    text must be treated as answer text, not hidden reasoning.
     """
-    in_thinking = True  # assume starting inside think block
+    in_thinking = assume_in_thinking
     buf = ""
     reasoning_text = ""
     full_text = ""
@@ -1651,17 +1719,21 @@ def _stream_responses(
                     enable_thinking=not bool(tools),  # Disable thinking for tool calls
                 )
 
-                # Start with reasoning item (Qwen3 starts inside think block)
-                reasoning_idx = 0
-                msg_output_idx = 1
-                rs_id = "rs_" + uuid.uuid4().hex[:12]
-                yield _sse("response.output_item.added", {
-                    "output_index": reasoning_idx,
-                    "item": {"id": rs_id, "type": "reasoning", "summary": []},
-                }, seq)
+                tokenizer = engine.get_tokenizer(repo_id)
+                template = getattr(tokenizer, "chat_template", None)
+                assume_in_thinking = bool((not tools) and isinstance(template, str) and "<think>" in template)
+                if assume_in_thinking:
+                    # Qwen-style templates start generation inside a think block.
+                    reasoning_idx = 0
+                    msg_output_idx = 1
+                    rs_id = "rs_" + uuid.uuid4().hex[:12]
+                    yield _sse("response.output_item.added", {
+                        "output_index": reasoning_idx,
+                        "item": {"id": rs_id, "type": "reasoning", "summary": []},
+                    }, seq)
 
                 raw_stream = _async_iter_sync_gen(gen)
-                async for kind, data in _parse_think_tags(raw_stream):
+                async for kind, data in _parse_think_tags(raw_stream, assume_in_thinking=assume_in_thinking):
                     if kind == "thinking":
                         yield _sse("response.reasoning_summary_text.delta", {
                             "output_index": reasoning_idx,
@@ -2126,16 +2198,20 @@ def _stream_anthropic(
                 _gen_kwargs.pop("reasoning_budget", None)
                 gen = engine.stream_generate(repo_id, messages, **_gen_kwargs)
 
-            # Emit thinking block start immediately (Qwen3 starts inside think)
-            yield _anthropic_sse({
-                "type": "content_block_start",
-                "index": content_idx,
-                "content_block": {"type": "thinking", "thinking": ""},
-            })
-            thinking_started = True
+            tokenizer = engine.get_tokenizer(repo_id)
+            template = getattr(tokenizer, "chat_template", None)
+            assume_in_thinking = bool(_enable_thinking and isinstance(template, str) and "<think>" in template)
+            if assume_in_thinking:
+                # Qwen-style templates start generation inside a think block.
+                yield _anthropic_sse({
+                    "type": "content_block_start",
+                    "index": content_idx,
+                    "content_block": {"type": "thinking", "thinking": ""},
+                })
+                thinking_started = True
 
             raw_stream = _async_iter_sync_gen(gen)
-            async for kind, chunk in _parse_think_tags(raw_stream):
+            async for kind, chunk in _parse_think_tags(raw_stream, assume_in_thinking=assume_in_thinking):
                 if kind == "thinking":
                     if not thinking_started:
                         thinking_started = True

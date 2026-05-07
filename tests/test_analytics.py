@@ -72,3 +72,63 @@ def test_track_posts_minimal_posthog_event(monkeypatch, tmp_home):
     assert properties["platform"]
     assert properties["arch"]
     assert "ignored" not in properties
+
+
+def test_track_error_sends_only_safe_error_fields(monkeypatch):
+    from ppmlx.analytics import track_error
+
+    captured = {}
+
+    def fake_track_async(event, data=None, *, context="cli"):
+        captured["event"] = event
+        captured["data"] = data
+        captured["context"] = context
+
+    monkeypatch.setattr("ppmlx.analytics.track_async", fake_track_async)
+
+    track_error(
+        context="cli",
+        command="pull",
+        error_type="ModelNotFoundError",
+        exit_code=1,
+        error_stage="download",
+    )
+
+    assert captured == {
+        "event": "cli_error",
+        "context": "cli",
+        "data": {
+            "command": "pull",
+            "error_type": "ModelNotFoundError",
+            "exit_code": 1,
+            "error_stage": "download",
+        },
+    }
+
+
+def test_string_properties_are_allowlisted(monkeypatch):
+    from ppmlx import config as config_module
+    from ppmlx.analytics import track
+
+    captured = {}
+
+    def fake_post_capture(host, project_api_key, event, properties):
+        captured.update(properties)
+        return True
+
+    monkeypatch.setattr(config_module, "load_config", lambda: _cfg())
+    monkeypatch.setattr("ppmlx.analytics._post_capture", fake_post_capture)
+    monkeypatch.setattr("ppmlx.analytics._anonymous_distinct_id", lambda: "ppmlx-test-id")
+
+    assert track(
+        "cli_error",
+        {
+            "command": "pull",
+            "error_type": "ModelNotFoundError",
+            "unsafe_message": "could contain a path or prompt",
+        },
+    )
+
+    assert captured["command"] == "pull"
+    assert captured["error_type"] == "ModelNotFoundError"
+    assert "unsafe_message" not in captured
