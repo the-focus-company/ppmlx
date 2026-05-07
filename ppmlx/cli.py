@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -22,6 +23,8 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 console = Console()
+
+_VALID_QUANTIZE_BITS = frozenset({2, 3, 4, 6, 8})
 
 
 @dataclass
@@ -1223,7 +1226,14 @@ def run(
         continue
 
 
-def _do_pull(model: str, token: Optional[str]) -> bool:
+def _do_pull(
+    model: str,
+    token: Optional[str],
+    *,
+    do_quantize: bool = False,
+    bits: int = 4,
+    keep_original: bool = False,
+) -> bool:
     """Download a single model and print result. Returns True on success."""
     from ppmlx.models import download_model, resolve_alias, ModelNotFoundError
     from ppmlx.memory import check_memory_warning
@@ -1242,7 +1252,6 @@ def _do_pull(model: str, token: Optional[str]) -> bool:
         warning = check_memory_warning(local_path)
         if warning:
             console.print(f"[yellow]{warning}[/yellow]")
-        return True
     except KeyboardInterrupt:
         console.print("\n[yellow]Download cancelled.[/yellow]")
         return False
@@ -1250,13 +1259,56 @@ def _do_pull(model: str, token: Optional[str]) -> bool:
         console.print(f"[red]Pull failed: {e}[/red]")
         return False
 
+    if do_quantize:
+        from ppmlx.quantize import (
+            quantize as run_quantize,
+            QuantizeConfig,
+            QuantizationError,
+        )
+
+        console.print(
+            f"[blue]Quantizing [bold]{model}[/bold] to {bits}-bit...[/blue]"
+        )
+        cfg = QuantizeConfig(bits=bits, hf_token=token)
+        try:
+            quantized_path = run_quantize(
+                model,
+                cfg,
+                progress_callback=lambda msg: console.print(
+                    f"  [dim]{msg}[/dim]"
+                ),
+                local_path=local_path,
+            )
+            console.print(
+                f"[green]✓ Quantized model saved to {quantized_path}[/green]"
+            )
+        except QuantizationError as e:
+            console.print(f"[red]Quantization failed: {e}[/red]")
+            return False
+
+        if not keep_original:
+            console.print(
+                f"[dim]Removing original download at {local_path}...[/dim]"
+            )
+            shutil.rmtree(local_path, ignore_errors=True)
+            console.print("[dim]Original removed.[/dim]")
+
+    return True
+
 
 @app.command()
 def pull(
     model: Optional[str] = typer.Argument(None, help="Model alias or HuggingFace repo ID (omit for interactive selector)"),
     token: Optional[str] = typer.Option(None, "--token", help="HuggingFace token"),
+    do_quantize: bool = typer.Option(False, "--quantize", "-q", help="Quantize the model after downloading"),
+    bits: int = typer.Option(4, "--bits", help="Quantization bit depth (2, 3, 4, 6, or 8)"),
+    keep_original: bool = typer.Option(False, "--keep-original", help="Keep the full-precision download after quantization"),
 ):
     """Download a model from HuggingFace Hub (interactive multiselect when no model given)."""
+    if do_quantize and bits not in _VALID_QUANTIZE_BITS:
+        console.print(f"[red]Invalid --bits value: {bits}. Must be one of {sorted(_VALID_QUANTIZE_BITS)}.[/red]")
+        raise typer.Exit(1)
+
     if model is None:
         from ppmlx.tui import pick_models
 
@@ -1266,10 +1318,10 @@ def pull(
             return
 
         for m in selected:
-            _do_pull(m, token)
+            _do_pull(m, token, do_quantize=do_quantize, bits=bits, keep_original=keep_original)
         return
 
-    if not _do_pull(model, token):
+    if not _do_pull(model, token, do_quantize=do_quantize, bits=bits, keep_original=keep_original):
         raise typer.Exit(1)
 
 
@@ -1477,7 +1529,7 @@ def config_cmd(
             raise typer.Exit(1)
         msgs = []
         if hf_token is not None:
-            msgs.append(f"HuggingFace token saved")
+            msgs.append("HuggingFace token saved")
         if thinking is not None:
             msgs.append(f"Thinking {'enabled' if thinking else 'disabled'}")
         if reasoning_budget is not None:
@@ -1650,6 +1702,100 @@ def stats(
             f"Avg reasoning tokens: [bold]{t.get('avg_reasoning_tokens', 'N/A')}[/bold]",
             title="Thinking Stats",
         ))
+
+
+@app.command()
+def bench(
+    model: str = typer.Argument(..., help="Model name or alias to benchmark"),
+    runs: int = typer.Option(3, "--runs", "-n", help="Number of iterations per scenario"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Save JSON results to this path"),
+    scenarios: Optional[str] = typer.Option(None, "--scenarios", "-s", help="Comma-separated scenario names (simple,complex,long_context)"),
+    compare: Optional[str] = typer.Option(None, "--compare", "-c", help="Compare against a baseline JSON file"),
+    host: str = typer.Option("127.0.0.1", "--host", help="Server host"),
+    port: int = typer.Option(6767, "--port", "-p", help="Server port"),
+    no_auto_server: bool = typer.Option(False, "--no-auto-server", help="Do not auto-start the server"),
+):
+    """Run standardized benchmarks against a model."""
+    from ppmlx.bench import (
+        BenchmarkRunner,
+        SCENARIOS,
+        print_results,
+        print_comparison,
+        save_results,
+        load_results,
+    )
+
+    base_url = f"http://{host}:{port}"
+    scenario_list = [s.strip() for s in scenarios.split(",")] if scenarios else None
+
+    # Check if server is already running
+    server_proc = None
+    if not no_auto_server:
+        import httpx
+
+        try:
+            resp = httpx.get(f"{base_url}/health", timeout=2.0)
+            resp.raise_for_status()
+            console.print(f"[green]Server already running at {base_url}[/green]")
+        except Exception:
+            console.print(f"[yellow]Starting ppmlx server on {base_url}...[/yellow]")
+            server_proc = subprocess.Popen(
+                [sys.executable, "-m", "ppmlx.cli", "serve", "--host", host, "--port", str(port)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            # Wait for server to become healthy
+            healthy = False
+            for _ in range(30):
+                time.sleep(1)
+                try:
+                    resp = httpx.get(f"{base_url}/health", timeout=2.0)
+                    if resp.status_code == 200:
+                        healthy = True
+                        break
+                except Exception:
+                    continue
+            if not healthy:
+                console.print("[red]Server failed to start within 30 seconds.[/red]")
+                if server_proc:
+                    server_proc.terminate()
+                raise typer.Exit(1)
+            console.print(f"[green]Server started at {base_url}[/green]")
+
+    try:
+        try:
+            runner = BenchmarkRunner(
+                model=model,
+                base_url=base_url,
+                runs=runs,
+                scenarios=scenario_list,
+            )
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(1)
+        result = runner.run()
+        print_results(result, console)
+
+        # Save results
+        if output:
+            out_path = save_results(result, Path(output))
+            console.print(f"\n[green]Results saved to {out_path}[/green]")
+
+        # Compare against baseline
+        if compare:
+            compare_path = Path(compare)
+            if not compare_path.exists():
+                console.print(f"[red]Baseline file not found: {compare}[/red]")
+                raise typer.Exit(1)
+            baseline = load_results(compare_path)
+            console.print()
+            print_comparison(result, baseline, console)
+
+    finally:
+        if server_proc:
+            console.print("[dim]Stopping auto-started server...[/dim]")
+            server_proc.terminate()
+            server_proc.wait(timeout=5)
 
 
 if __name__ == "__main__":
