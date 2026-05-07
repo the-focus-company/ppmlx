@@ -611,3 +611,29 @@ async def test_parse_think_tags_can_assume_template_injected_thinking():
         ("text", "answer"),
         ("flush_text", "answer"),
     ]
+
+
+def test_anthropic_stream_with_tools_disables_thinking(client):
+    def plain_stream(*args, **kwargs):
+        return iter(["Tool-capable answer"])
+
+    mock_engine.stream_generate = MagicMock(side_effect=plain_stream)
+    mock_engine.get_tokenizer.return_value = mock_tokenizer
+    sys.modules["ppmlx.engine"].get_engine = MagicMock(return_value=mock_engine)
+    mock_config.tool_awareness.mode = "no_tools_only"
+
+    response = client.post("/v1/messages", json={
+        "model": "test-model",
+        "stream": True,
+        "thinking": {"type": "adaptive"},
+        "messages": [{"role": "user", "content": "Hi"}],
+        "tools": [{
+            "name": "bash",
+            "description": "Run shell commands",
+            "input_schema": {"type": "object", "properties": {}},
+        }],
+    })
+
+    assert response.status_code == 200
+    assert '"type": "text_delta"' in response.text
+    assert mock_engine.stream_generate.call_args.kwargs["enable_thinking"] is False
