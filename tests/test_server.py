@@ -554,3 +554,60 @@ def test_stream_chat_no_think_tags_just_content(client):
     total = "".join(reasoning_parts) + "".join(content_parts)
     assert "Hello" in total
     assert "world" in total
+
+
+def test_api_error_tracking_for_http_error_response(client, monkeypatch):
+    from ppmlx import server as server_module
+
+    captured = []
+
+    def fake_track_api_error(**kwargs):
+        captured.append(kwargs)
+
+    monkeypatch.setattr(server_module, "_track_api_error", fake_track_api_error)
+
+    response = client.get("/definitely-missing")
+
+    assert response.status_code == 404
+    assert captured
+    assert captured[-1]["endpoint"] == "/definitely-missing"
+    assert captured[-1]["status_code"] == 404
+    assert captured[-1]["error_type"] == "HTTPError"
+    assert captured[-1]["error_stage"] == "response"
+
+
+async def _aiter(chunks):
+    for chunk in chunks:
+        yield chunk
+
+
+@pytest.mark.asyncio
+async def test_parse_think_tags_plain_text_is_text_by_default():
+    from ppmlx.server import _parse_think_tags
+
+    events = [event async for event in _parse_think_tags(_aiter(["Hello", " world"]))]
+
+    assert events == [
+        ("text", "Hello"),
+        ("text", " world"),
+        ("flush_text", "Hello world"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_parse_think_tags_can_assume_template_injected_thinking():
+    from ppmlx.server import _parse_think_tags
+
+    events = [
+        event async for event in _parse_think_tags(
+            _aiter(["reason", "</think>", "answer"]),
+            assume_in_thinking=True,
+        )
+    ]
+
+    assert events == [
+        ("thinking", "reason"),
+        ("thinking_done", "reason"),
+        ("text", "answer"),
+        ("flush_text", "answer"),
+    ]

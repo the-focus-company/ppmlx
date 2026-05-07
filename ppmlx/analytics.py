@@ -24,20 +24,31 @@ def _string(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
-def _sanitize_value(value: Any) -> int | float | bool | None:
+_SAFE_STRING_KEYS = {
+    "command",
+    "endpoint",
+    "error_type",
+    "error_stage",
+}
+
+
+def _sanitize_value(key: str, value: Any) -> int | float | bool | str | None:
     if isinstance(value, bool):
         return value
     if isinstance(value, (int, float)):
         return value
+    if key in _SAFE_STRING_KEYS and isinstance(value, str):
+        safe = "".join(ch for ch in value if ch.isalnum() or ch in "_-/.:").strip()
+        return safe[:80] or None
     return None
 
 
-def _sanitize_data(data: dict[str, Any] | None) -> dict[str, int | float | bool]:
+def _sanitize_data(data: dict[str, Any] | None) -> dict[str, int | float | bool | str]:
     if not data:
         return {}
-    cleaned: dict[str, int | float | bool] = {}
+    cleaned: dict[str, int | float | bool | str] = {}
     for key, value in data.items():
-        safe = _sanitize_value(value)
+        safe = _sanitize_value(key, value)
         if safe is not None:
             cleaned[key] = safe
     return cleaned
@@ -130,3 +141,27 @@ def track_async(event: str, data: dict[str, Any] | None = None, *, context: str 
         name=f"ppmlx-analytics-{event}",
     )
     thread.start()
+
+
+def track_error(
+    *,
+    context: str,
+    error_type: str,
+    command: str | None = None,
+    endpoint: str | None = None,
+    status_code: int | None = None,
+    exit_code: int | None = None,
+    error_stage: str | None = None,
+) -> None:
+    data: dict[str, Any] = {"error_type": error_type}
+    if command:
+        data["command"] = command
+    if endpoint:
+        data["endpoint"] = endpoint
+    if status_code is not None:
+        data["status_code"] = status_code
+    if exit_code is not None:
+        data["exit_code"] = exit_code
+    if error_stage:
+        data["error_stage"] = error_stage
+    track_async("cli_error" if context == "cli" else "api_error", data, context=context)

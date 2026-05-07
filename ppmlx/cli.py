@@ -66,6 +66,54 @@ def _track_usage(event: str, data: dict | None = None, *, context: str = "cli") 
         pass
 
 
+def _current_command(argv: list[str] | None = None) -> str:
+    args = list(sys.argv[1:] if argv is None else argv)
+    for arg in args:
+        if arg in {"--help", "-h", "--version", "-V"}:
+            return arg.lstrip("-")
+        if not arg.startswith("-"):
+            return arg.replace("_", "-")
+    return "root"
+
+
+def _track_cli_error(
+    error_type: str,
+    *,
+    command: str | None = None,
+    exit_code: int | None = None,
+    error_stage: str | None = None,
+) -> None:
+    try:
+        from ppmlx.analytics import track_error
+
+        track_error(
+            context="cli",
+            command=command or _current_command(),
+            error_type=error_type,
+            exit_code=exit_code,
+            error_stage=error_stage,
+        )
+    except Exception:
+        pass
+
+
+def main_entry() -> None:
+    """Console-script wrapper that tracks non-zero CLI exits safely."""
+    try:
+        app()
+    except KeyboardInterrupt:
+        _track_cli_error("KeyboardInterrupt", exit_code=130)
+        raise
+    except SystemExit as exc:
+        code = exc.code if isinstance(exc.code, int) else 1
+        if code:
+            _track_cli_error("SystemExit", exit_code=code)
+        raise
+    except Exception as exc:
+        _track_cli_error(type(exc).__name__, exit_code=1)
+        raise
+
+
 # ── Unified model record & table builder ─────────────────────────────
 
 @dataclass
@@ -1799,4 +1847,4 @@ def bench(
 
 
 if __name__ == "__main__":
-    app()
+    main_entry()
