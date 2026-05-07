@@ -6,8 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-DEFAULT_ANALYTICS_HOST = "https://us.i.posthog.com"
-DEFAULT_ANALYTICS_PROJECT_API_KEY = "phc_vdLX8Zhq9R3NqVvMlPmv96WAh7AZJYDCEP4iQwzFlYI"
+DEFAULT_ANALYTICS_HOST = "https://eu.i.posthog.com"
+DEFAULT_ANALYTICS_PROJECT_API_KEY = "phc_rnwLcbdiern6SwykkoSt9BPLoB8zAjVsae3TmgrXw2kA"
 LEGACY_ANALYTICS_HOSTS = {"https://analytics.ppmlx.dev"}
 
 
