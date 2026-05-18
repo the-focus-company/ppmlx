@@ -119,6 +119,24 @@ def test_clause_level_grounding_allows_supported_paraphrase():
     assert result.required_missed == []
 
 
+def test_load_session_messages_strips_hidden_thinking_blocks(tmp_path):
+    path = tmp_path / "pi-thinking.jsonl"
+    path.write_text(json.dumps({
+        "type": "message",
+        "message": {
+            "role": "assistant",
+            "content": [
+                {"type": "thinking", "thinking": "secret chain", "thinkingSignature": "encrypted"},
+                {"type": "text", "text": "Visible answer only."},
+            ],
+        },
+    }) + "\n")
+
+    _, messages = load_session_messages(path, source="pi")
+
+    assert messages == [{"role": "assistant", "content": "Visible answer only."}]
+
+
 def test_load_pi_and_claude_session_messages(tmp_path):
     pi_path = tmp_path / "pi.jsonl"
     pi_path.write_text(

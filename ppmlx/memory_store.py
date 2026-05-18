@@ -515,6 +515,148 @@ class MemoryStore:
             "recent": recent,
         }
 
+    def graph_snapshot(
+        self,
+        *,
+        status: str | None = "active",
+        query: str | None = None,
+        app_id: str | None = None,
+        project_id: str | None = None,
+        session_id: str | None = None,
+        limit: int = 120,
+    ) -> dict[str, Any]:
+        """Return a read-only graph view of memory entities, edges, facts, and events."""
+        self.init()
+        safe_limit = max(1, min(int(limit), 500))
+        status_filter = None if status in {None, "", "all"} else status
+        if query and query.strip():
+            candidates = self.search(
+                query,
+                status=status_filter,
+                limit=safe_limit,
+                app_id=app_id,
+                project_id=project_id,
+                session_id=session_id,
+            )
+        else:
+            candidates = self.query_candidates(
+                status=status_filter,
+                limit=safe_limit,
+                app_id=app_id,
+                project_id=project_id,
+                session_id=session_id,
+            )
+        candidate_ids = [str(candidate["candidate_id"]) for candidate in candidates]
+        edges = self._graph_edges(candidate_ids, status=status_filter)
+        nodes = self._graph_nodes(candidates, edges)
+        events = self._graph_events(app_id=app_id, project_id=project_id, session_id=session_id, limit=min(safe_limit, 100))
+        return {
+            "path": str(self.path),
+            "filters": {
+                "status": status_filter or "all",
+                "query": query or "",
+                "app_id": app_id,
+                "project_id": project_id,
+                "session_id": session_id,
+                "limit": safe_limit,
+            },
+            "stats": self.stats(),
+            "nodes": nodes,
+            "edges": edges,
+            "candidates": candidates,
+            "events": events,
+        }
+
+    def _graph_edges(self, candidate_ids: list[str], *, status: str | None) -> list[dict[str, Any]]:
+        if not candidate_ids:
+            return []
+        placeholders = ",".join("?" for _ in candidate_ids)
+        conditions = [f"me.source_candidate_id IN ({placeholders})"]
+        params: list[Any] = list(candidate_ids)
+        if status:
+            conditions.append("me.status = ?")
+            params.append(status)
+        with self._connect() as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                f"""SELECT me.*, ef.name AS from_name, et.name AS to_name,
+                           c.type AS candidate_type, c.text AS candidate_text,
+                           c.source_quote, c.salience, ev.app_id, ev.project_id, ev.session_id
+                    FROM memory_edges me
+                    JOIN memory_entities ef ON ef.entity_id = me.from_entity_id
+                    JOIN memory_entities et ON et.entity_id = me.to_entity_id
+                    LEFT JOIN memory_candidates c ON c.candidate_id = me.source_candidate_id
+                    LEFT JOIN memory_events ev ON ev.event_id = c.event_id
+                    WHERE {' AND '.join(conditions)}
+                    ORDER BY me.created_at DESC""",
+                params,
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def _graph_nodes(self, candidates: list[dict[str, Any]], edges: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        nodes: dict[str, dict[str, Any]] = {}
+
+        def add(name: str, *, role: str, candidate: dict[str, Any] | None = None) -> None:
+            cleaned = str(name or "").strip()
+            if not cleaned:
+                return
+            entity_id = self._entity_id(cleaned, "concept")
+            node = nodes.setdefault(entity_id, {
+                "id": entity_id,
+                "name": cleaned,
+                "type": "concept",
+                "roles": [],
+                "candidate_count": 0,
+                "salience": 0.0,
+            })
+            if role not in node["roles"]:
+                node["roles"].append(role)
+            if candidate:
+                node["candidate_count"] += 1
+                try:
+                    node["salience"] = max(float(node.get("salience") or 0.0), float(candidate.get("salience") or 0.0))
+                except (TypeError, ValueError):
+                    pass
+
+        for candidate in candidates:
+            add(str(candidate.get("subject") or ""), role="subject", candidate=candidate)
+            add(str(candidate.get("object") or ""), role="object", candidate=candidate)
+        for edge in edges:
+            add(str(edge.get("from_name") or ""), role="edge_from")
+            add(str(edge.get("to_name") or ""), role="edge_to")
+        return sorted(nodes.values(), key=lambda node: (-int(node.get("candidate_count") or 0), str(node.get("name") or "").lower()))
+
+    def _graph_events(
+        self,
+        *,
+        app_id: str | None,
+        project_id: str | None,
+        session_id: str | None,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        conditions: list[str] = []
+        params: list[Any] = []
+        if app_id:
+            conditions.append("app_id = ?")
+            params.append(app_id)
+        if project_id:
+            conditions.append("project_id = ?")
+            params.append(project_id)
+        if session_id:
+            conditions.append("session_id = ?")
+            params.append(session_id)
+        where = " WHERE " + " AND ".join(conditions) if conditions else ""
+        params.append(limit)
+        with self._connect() as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                f"""SELECT event_id, timestamp, endpoint, app_id, project_id, session_id, model_alias, model_repo
+                    FROM memory_events{where}
+                    ORDER BY timestamp DESC LIMIT ?""",
+                params,
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def stats(self) -> dict[str, Any]:
         self.init()
         with self._connect() as conn:

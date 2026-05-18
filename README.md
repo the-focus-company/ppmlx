@@ -116,6 +116,7 @@ print(response.choices[0].message.content)
 | `ppmlx rm <model>` | Remove a model | `-f` skip confirmation |
 | `ppmlx ps` | Show loaded models & memory | |
 | `ppmlx quantize <model>` | Convert & quantize HF model to MLX | `-b bits`, `--group-size`, `-o output` |
+| `ppmlx graph` | Open a local read-only web view of the temporal memory graph | `--project`, `--session`, `--query`, `--json` |
 | `ppmlx memory status/search/list/handoff/compact-stats` | Inspect the experimental local temporal memory graph | `--json`, `--status`, `--scope`, `--session` |
 | `ppmlx memory-eval` | Run the anti-garbage memory eval suite | `--json`, `--dataset`, `--predictions` |
 | `ppmlx compact-eval` | Run long-session rolling-context compaction evals | `--json`, `--output` |
@@ -184,6 +185,7 @@ ppmlx memory search "concise answers"
 ppmlx memory list --status active
 ppmlx memory handoff --project tv-shopping --session tv-session-001
 ppmlx memory compact-stats --since 24
+ppmlx graph --project tv-shopping --session tv-session-001
 ppmlx trace export --project tv-shopping --session tv-session-001 --output trace.json
 ppmlx compact-replay trace.json --expect "budget = 5000 PLN"
 ppmlx memory-eval

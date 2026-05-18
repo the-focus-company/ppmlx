@@ -170,6 +170,54 @@ def test_project_decision_is_project_scoped(tmp_path):
     assert rows[0]["subject"] == "ppmlx"
 
 
+def test_memory_store_graph_snapshot_returns_nodes_edges_and_events(tmp_path):
+    engine, store = _make_engine(tmp_path)
+    engine.capture_chat(
+        request_id="graph-seed",
+        endpoint="/v1/chat/completions",
+        model_alias="test-model",
+        model_repo="repo/test",
+        project_id="ppmlx",
+        session_id="s1",
+        messages=[{"role": "user", "content": "We decided to build a temporal memory graph first."}],
+        response_text="ok",
+    )
+
+    snapshot = store.graph_snapshot(project_id="ppmlx", session_id="s1", query="temporal graph")
+
+    assert snapshot["filters"]["project_id"] == "ppmlx"
+    assert snapshot["nodes"]
+    assert snapshot["edges"]
+    assert snapshot["candidates"]
+    assert snapshot["events"][0]["event_id"] == "graph-seed"
+    assert any(edge["relation"] == "decided" for edge in snapshot["edges"])
+
+
+def test_graph_cli_json_outputs_snapshot(tmp_home):
+    reset_memory_store()
+    store = MemoryStore(tmp_home / ".ppmlx" / "memory.db")
+    engine = MemoryEngine(store=store)
+    engine.capture_chat(
+        request_id="graph-cli-seed",
+        endpoint="/v1/chat/completions",
+        model_alias="test-model",
+        model_repo="repo/test",
+        project_id="ppmlx",
+        messages=[{"role": "user", "content": "We decided to expose ppmlx graph view."}],
+        response_text="ok",
+    )
+    reset_memory_store()
+
+    result = CliRunner().invoke(app, ["graph", "--project", "ppmlx", "--json"])
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data["nodes"]
+    assert data["edges"]
+    assert data["candidates"][0]["project_id"] == "ppmlx"
+    reset_memory_store()
+
+
 def test_memory_store_compact_stats(tmp_path):
     store = MemoryStore(tmp_path / "memory.db")
     store.record_compaction({

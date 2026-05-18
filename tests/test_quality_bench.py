@@ -60,7 +60,7 @@ def test_quality_bench_with_fake_responder(tmp_path):
     assert "graph_hot" in data["probes"][0]["ablations"]
 
 
-def test_quality_bench_buckets_oracle_facts_missing_from_context(tmp_path):
+def test_quality_bench_skips_oracle_facts_missing_from_context(tmp_path):
     path = tmp_path / "pi.jsonl"
     messages = [{"role": "system", "content": "You are helpful."}]
     for idx in range(5):
@@ -89,9 +89,9 @@ def test_quality_bench_buckets_oracle_facts_missing_from_context(tmp_path):
     )
 
     data = report.to_dict()
-    assert data["summary"]["passed"] == 0
-    assert data["summary"]["failure_buckets"] == {"oracle_unavailable_in_context": 1}
-    assert data["probes"][0]["context_missing_count"] > 0
+    assert data["summary"]["probes"] == 0
+    assert data["summary"]["skipped_by_type"] == {"oracle_unavailable_in_context": 1}
+    assert data["skipped_probes"][0]["reason"] == "no expected-answer oracle facts are recoverable from compact/replay context"
 
 
 def test_probe_classifier_skips_tool_and_code_action_turns():

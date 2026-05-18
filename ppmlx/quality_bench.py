@@ -51,6 +51,17 @@ class QualityBenchSkippedProbe:
 
 
 @dataclass
+class QualityBenchPreparedProbe:
+    probe: QualityBenchProbe
+    replay: dict[str, Any]
+    source_context: str
+    required_facts: list[str]
+    raw_required_facts: list[str]
+    context_missing: list[str]
+    context_fact_coverage: float
+
+
+@dataclass
 class QualityBenchProbeResult:
     probe_id: str
     passed: bool
@@ -264,9 +275,20 @@ def run_quality_bench(
         max_probes=max_probes,
         include_probe_types=include_probe_types,
     )
-    results = [
-        run_quality_probe(
-            probe,
+    results: list[QualityBenchProbeResult] = []
+    all_skipped = list(skipped)
+    for probe in probes:
+        prepared = prepare_quality_probe(probe, model=model)
+        if not prepared.required_facts:
+            all_skipped.append(QualityBenchSkippedProbe(
+                probe_id=probe.probe_id,
+                episode_index=probe.episode_index,
+                probe_type="oracle_unavailable_in_context",
+                reason="no expected-answer oracle facts are recoverable from compact/replay context",
+            ))
+            continue
+        results.append(run_quality_probe(
+            prepared.probe,
             base_url=base_url,
             model=model,
             source=resolved_source,
@@ -274,9 +296,8 @@ def run_quality_bench(
             timeout_sec=timeout_sec,
             include_content=include_content,
             responder=responder,
-        )
-        for probe in probes
-    ]
+            prepared=prepared,
+        ))
     return QualityBenchReport(
         timestamp=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         path=str(path),
@@ -286,7 +307,46 @@ def run_quality_bench(
         total_messages=len(messages),
         total_tokens=estimate_messages_tokens(messages),
         probes=results,
-        skipped_probes=skipped,
+        skipped_probes=all_skipped,
+    )
+
+
+def prepare_quality_probe(probe: QualityBenchProbe, *, model: str) -> QualityBenchPreparedProbe:
+    """Prepare replay/oracle facts, keeping only facts visible in compact context.
+
+    The recorded next assistant answer often contains new synthesis or tool-loop
+    actions that are not present in the prefix. Those are useful diagnostics but
+    not fair recall requirements for a text-only compact-context probe.
+    """
+    messages = [*probe.prefix_messages, probe.user_message]
+    replay = _probe_replay(messages, model=model, probe_id=probe.probe_id)
+    source_context = replay.get("reduced_context") or replay.get("session_context") or ""
+    raw_required = select_required_facts(
+        source_context=probe.expected_answer,
+        question=_message_text(probe.user_message),
+        reference_answer=probe.expected_answer,
+        max_facts=8,
+    )
+    if not raw_required:
+        raw_required = select_required_facts(
+            source_context=source_context,
+            question=_message_text(probe.user_message),
+            reference_answer=probe.expected_answer,
+            max_facts=8,
+        )
+    context_found, context_missing = match_facts(source_context, raw_required)
+    if not context_found and raw_required:
+        required_facts: list[str] = []
+    else:
+        required_facts = context_found or raw_required
+    return QualityBenchPreparedProbe(
+        probe=probe,
+        replay=replay,
+        source_context=source_context,
+        required_facts=required_facts,
+        raw_required_facts=raw_required,
+        context_missing=context_missing,
+        context_fact_coverage=_ratio(len(context_found), len(raw_required)),
     )
 
 
@@ -300,6 +360,7 @@ def run_quality_probe(
     timeout_sec: float,
     include_content: bool = False,
     responder: Responder | None = None,
+    prepared: QualityBenchPreparedProbe | None = None,
 ) -> QualityBenchProbeResult:
     messages = [*probe.prefix_messages, probe.user_message]
     metadata = {"app_id": "quality-bench", "project_id": f"quality-bench-{source}", "session_id": probe.probe_id}
@@ -318,23 +379,12 @@ def run_quality_probe(
             )
             generated = _assistant_content(data)
             usage = data.get("usage") or {}
-        replay = _probe_replay(messages, model=model, probe_id=probe.probe_id)
-        source_context = replay.get("reduced_context") or replay.get("session_context") or ""
-        required_facts = select_required_facts(
-            source_context=probe.expected_answer,
-            question=_message_text(probe.user_message),
-            reference_answer=probe.expected_answer,
-            max_facts=8,
-        )
-        if not required_facts:
-            required_facts = select_required_facts(
-                source_context=source_context,
-                question=_message_text(probe.user_message),
-                reference_answer=probe.expected_answer,
-                max_facts=8,
-            )
-        context_found, context_missing = match_facts(source_context, required_facts)
-        context_fact_coverage = _ratio(len(context_found), len(required_facts))
+        prepared = prepared or prepare_quality_probe(probe, model=model)
+        replay = prepared.replay
+        source_context = prepared.source_context
+        required_facts = prepared.required_facts
+        context_missing = prepared.context_missing
+        context_fact_coverage = prepared.context_fact_coverage
         case = AnswerQualityCase(
             case_id=probe.probe_id,
             question=_message_text(probe.user_message),
@@ -356,7 +406,6 @@ def run_quality_probe(
         failure_bucket = _failure_bucket(
             passed=quality.passed,
             required_facts=required_facts,
-            context_missing=context_missing,
             quality=quality,
             thresholds=evaluator.thresholds,
         )
@@ -421,7 +470,6 @@ def _failure_bucket(
     *,
     passed: bool,
     required_facts: list[str],
-    context_missing: list[str],
     quality: Any,
     thresholds: Any,
 ) -> str:
@@ -429,10 +477,6 @@ def _failure_bucket(
         return "passed"
     if not required_facts:
         return "no_oracle_facts"
-    if len(context_missing) == len(required_facts):
-        return "oracle_unavailable_in_context"
-    if context_missing:
-        return "context_missing_oracle_facts"
     if quality.recall < thresholds.min_recall:
         return "model_missed_context_facts"
     if quality.grounding < thresholds.min_grounding or quality.unsupported_terms:

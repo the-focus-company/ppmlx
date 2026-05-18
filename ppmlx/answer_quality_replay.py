@@ -283,10 +283,25 @@ def _content_text(content: Any) -> str:
         parts: list[str] = []
         for item in content:
             if isinstance(item, dict):
-                parts.append(str(item.get("text") or item.get("content") or item))
+                item_type = str(item.get("type") or "").lower()
+                if item_type in {"thinking", "reasoning", "redacted_thinking", "signature"}:
+                    continue
+                if item.get("text") is not None:
+                    parts.append(str(item.get("text") or ""))
+                elif item.get("content") is not None:
+                    nested = _content_text(item.get("content"))
+                    if nested:
+                        parts.append(nested)
+                elif item_type in {"tool_result", "tool_output"}:
+                    nested = _content_text(item.get("output") or item.get("tool_output") or item.get("result"))
+                    if nested:
+                        parts.append(nested)
+                # Other structured blocks (tool calls, encrypted thinking, UI
+                # metadata) are intentionally skipped so replay benchmarks use
+                # visible conversation text instead of hidden/provider payloads.
             else:
                 parts.append(str(item))
-        return "\n".join(parts)
+        return "\n".join(part for part in parts if part.strip())
     return json.dumps(content, ensure_ascii=False, default=str)
 
 
