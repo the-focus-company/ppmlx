@@ -273,17 +273,11 @@ def _tree_size(path: Path) -> int:
 
 def download_model(alias_or_repo: str, token: str | None = None) -> Path:
     """
-    Download a model from HuggingFace Hub with a Rich progress bar.
+    Download a model from HuggingFace Hub with a single Rich progress bar.
 
-    ``snapshot_download`` runs in a daemon thread with tqdm disabled.
-    The main thread polls two directories every 0.5 s:
-
-    * **local_path** — where finished files land
-    * **HF blob cache** — ``~/.cache/huggingface/hub/models--…/blobs/``
-      where in-progress ``.incomplete`` files grow byte-by-byte
-
-    ``downloaded = max(cache_growth, local_growth)`` avoids double-
-    counting while still tracking whichever location is active.
+    HuggingFace already emits byte-level progress through ``tqdm_class``.
+    We adapt those callbacks into Rich instead of polling filesystem sizes,
+    which makes updates regular for HTTP and Xet-backed downloads.
     """
     import threading
     from rich.progress import (
@@ -291,7 +285,6 @@ def download_model(alias_or_repo: str, token: str | None = None) -> Path:
         TimeRemainingColumn, TextColumn, SpinnerColumn,
     )
     from huggingface_hub import snapshot_download
-    from huggingface_hub.constants import HF_HUB_CACHE
 
     token = _get_hf_token(token)
     repo_id = resolve_alias(alias_or_repo)
@@ -302,18 +295,7 @@ def download_model(alias_or_repo: str, token: str | None = None) -> Path:
         return local_path
 
     local_path.mkdir(parents=True, exist_ok=True)
-    total = _get_repo_size(repo_id, token)
-
-    # HF blob cache for this specific model (in-progress .incomplete files live here).
-    cache_path = Path(HF_HUB_CACHE) / f"models--{repo_id.replace('/', '--')}" / "blobs"
-
-    # Baselines — subtract pre-existing data (previous partial attempts, etc.)
-    baseline_local = _tree_size(local_path)
-    baseline_cache = _tree_size(cache_path)
-
-    # Suppress HF's own tqdm bars BEFORE the thread starts.
-    prev_hf_env = os.environ.get("HF_HUB_DISABLE_PROGRESS_BARS")
-    os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+    expected_total = _get_repo_size(repo_id, token)
 
     # ── colours ──────────────────────────────────────────────────────
     BLUE, GREEN, ORANGE, RED, WHITE = "blue", "green", "#d78700", "red", "white"
@@ -328,35 +310,113 @@ def download_model(alias_or_repo: str, token: str | None = None) -> Path:
         TimeRemainingColumn(),
         refresh_per_second=10,
     ) as progress:
-        task = progress.add_task(f"↓ {alias_or_repo}", total=total)
+        task = progress.add_task(f"↓ {alias_or_repo}", total=expected_total)
 
-        # ── background download ──────────────────────────────────────
-        result: dict = {}
+        class _RichTqdm:
+            """Small tqdm-compatible adapter used by HuggingFace Hub."""
 
-        def _bg_download() -> None:
-            try:
-                snapshot_download(
-                    repo_id=repo_id,
-                    local_dir=str(local_path),
-                    token=token,
-                    ignore_patterns=_DOWNLOAD_IGNORE_PATTERNS,
+            _lock = threading.RLock()
+
+            @classmethod
+            def get_lock(cls):
+                return cls._lock
+
+            @classmethod
+            def set_lock(cls, lock) -> None:
+                cls._lock = lock
+
+            def __init__(
+                self,
+                iterable=None,
+                desc: str | None = None,
+                total: int | float | None = None,
+                initial: int | float = 0,
+                unit: str = "it",
+                unit_scale: bool = False,
+                disable: bool = False,
+                name: str | None = None,
+                **_: object,
+            ) -> None:
+                self.iterable = iterable
+                self.desc = desc or ""
+                self.total = total
+                self.n = initial or 0
+                self.unit = unit
+                self.unit_scale = unit_scale
+                self.disable = disable
+                self.name = name
+                self._is_bytes = (
+                    unit == "B"
+                    or name == "huggingface_hub.snapshot_download"
+                    or self.desc.startswith("Downloading")
                 )
-            except BaseException as exc:
-                result["error"] = exc
+                if self._is_bytes:
+                    self.refresh()
 
-        dl_thread = threading.Thread(target=_bg_download, daemon=True)
-        dl_thread.start()
+            def _display_total(self) -> int | float | None:
+                current = self.total or 0
+                if expected_total:
+                    current = max(current, expected_total)
+                if self.n > current:
+                    current = self.n
+                return current or None
 
-        # ── poll filesystem ──────────────────────────────────────────
+            def __iter__(self):
+                if self.iterable is None:
+                    return
+                for item in self.iterable:
+                    yield item
+                    self.update(1)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback) -> None:
+                self.close()
+
+            def update(self, n: int | float | None = 1) -> None:
+                if n is None:
+                    n = 1
+                with type(self)._lock:
+                    self.n += n
+                    if self._is_bytes:
+                        progress.update(
+                            task,
+                            completed=self.n,
+                            total=self._display_total(),
+                        )
+
+            def refresh(self, *args: object, **kwargs: object) -> None:
+                if self._is_bytes:
+                    with type(self)._lock:
+                        progress.update(
+                            task,
+                            completed=self.n,
+                            total=self._display_total(),
+                        )
+
+            def set_description(self, desc: str | None = None, refresh: bool = True) -> None:
+                self.desc = desc or ""
+                if refresh:
+                    self.refresh()
+
+            def close(self) -> None:
+                pass
+
+            def clear(self, *args: object, **kwargs: object) -> None:
+                pass
+
+            def display(self, *args: object, **kwargs: object) -> None:
+                pass
+
         try:
-            while dl_thread.is_alive():
-                local_growth = _tree_size(local_path) - baseline_local
-                cache_growth = _tree_size(cache_path) - baseline_cache
-                downloaded = max(local_growth, cache_growth)
-                if total:
-                    downloaded = min(downloaded, total)
-                progress.update(task, completed=downloaded)
-                dl_thread.join(timeout=0.5)
+            snapshot_download(
+                repo_id=repo_id,
+                local_dir=str(local_path),
+                token=token,
+                ignore_patterns=_DOWNLOAD_IGNORE_PATTERNS,
+                tqdm_class=_RichTqdm,
+            )
         except KeyboardInterrupt:
             bar.complete_style = ORANGE  # type: ignore[assignment]
             bar.finished_style = ORANGE  # type: ignore[assignment]
@@ -364,31 +424,22 @@ def download_model(alias_or_repo: str, token: str | None = None) -> Path:
             progress.stop()
             shutil.rmtree(local_path, ignore_errors=True)
             raise
-        finally:
-            # Restore env var no matter what.
-            if prev_hf_env is None:
-                os.environ.pop("HF_HUB_DISABLE_PROGRESS_BARS", None)
-            else:
-                os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = prev_hf_env
-
-        # ── handle result ────────────────────────────────────────────
-        exc = result.get("error")
-        if exc:
+        except Exception as exc:
             bar.complete_style = RED  # type: ignore[assignment]
             bar.finished_style = RED  # type: ignore[assignment]
             progress.update(task, description=f"[bold {RED}]✗ {alias_or_repo}")
             shutil.rmtree(local_path, ignore_errors=True)
-            if isinstance(exc, KeyboardInterrupt):
-                raise exc
             raise ModelNotFoundError(
                 f"Failed to download '{repo_id}': {exc}"
             ) from exc
 
         # success
+        final_total = expected_total or _tree_size(local_path)
         bar.complete_style = GREEN  # type: ignore[assignment]
         progress.update(
             task,
-            completed=total or _tree_size(local_path) - baseline_local,
+            total=final_total,
+            completed=final_total,
             description=f"[bold {GREEN}]✓ {alias_or_repo}",
         )
 

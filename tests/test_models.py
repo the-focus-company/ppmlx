@@ -148,12 +148,32 @@ def test_download_model_calls_snapshot(tmp_home, monkeypatch):
     called = []
 
     def fake_snapshot_download(repo_id, local_dir, token, ignore_patterns, **kwargs):
+        tqdm_class = kwargs["tqdm_class"]
         called.append({
             "repo_id": repo_id,
             "local_dir": local_dir,
             "token": token,
             "ignore_patterns": ignore_patterns,
+            "tqdm_class": tqdm_class,
         })
+
+        # Exercise both tqdm shapes used by huggingface_hub.snapshot_download:
+        # the file-count iterator and the aggregate byte-progress object.
+        list(tqdm_class([1, 2], total=2, desc="Fetching 2 files"))
+        bytes_progress = tqdm_class(
+            desc="Downloading (incomplete total...)",
+            total=0,
+            initial=0,
+            unit="B",
+            unit_scale=True,
+            name="huggingface_hub.snapshot_download",
+        )
+        bytes_progress.total += 4
+        bytes_progress.refresh()
+        bytes_progress.update(2)
+        bytes_progress.update(2)
+        bytes_progress.set_description("Download complete")
+
         # Create a file so the directory appears non-empty
         Path(local_dir).mkdir(parents=True, exist_ok=True)
         (Path(local_dir) / "config.json").write_text("{}")
@@ -167,4 +187,5 @@ def test_download_model_calls_snapshot(tmp_home, monkeypatch):
     assert called[0]["repo_id"] == "mlx-community/Qwen3.5-0.8B-OptiQ-4bit"
     assert "Qwen3.5-0.8B-OptiQ-4bit" in called[0]["local_dir"]
     assert called[0]["token"] is None
+    assert called[0]["tqdm_class"] is not None
     assert result.exists()
